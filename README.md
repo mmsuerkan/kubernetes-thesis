@@ -137,23 +137,43 @@ Sistem 4 ana bileşenden oluşur ve her biri belirli bir görevi yerine getirir:
 ### 1. **🔍 Detector Agent**
 - **Function:** Kubernetes event'lerini sürekli monitor eder ve anomali tespit eder
 - **Implementation:** client-go ile Watch API kullanarak real-time event streaming
+- **Technology Stack:**
+  - **Go + client-go:** Kubernetes API client library
+  - **Kubernetes Watch API:** Real-time event streaming
+  - **Redis Go Client:** Message queue integration
+  - **Gin/Echo Framework:** REST API endpoints
 - **Output:** Structured error events → Message Queue
 
 ### 2. **🤖 Analyzer Agent (K8sGPT + AI)**  
 - **Function:** Error events'i alır, AI-powered root cause analysis yapar
 - **Implementation:** K8sGPT + GPT-4 integration ile intelligent diagnosis
+- **Technology Stack:**
+  - **K8sGPT Binary:** Kubernetes diagnostic tool integration
+  - **OpenAI SDK (Go/Python):** GPT-4 API client
+  - **LangChain:** Prompt engineering ve chain management
+  - **JSON/YAML Parser:** Structured output processing
 - **Output:** Diagnostic report + remediation recommendations → Message Queue
 
 ### 3. **⚡ Executor Agent**
 - **Function:** AI recommendations'ı alır ve otomatik remediation uygular
 - **Implementation:** Kubernetes API calls + GPT-4 Turbo (command validation)
 - **AI Model:** GPT-4 Turbo - Risk assessment ve command safety validation
+- **Technology Stack:**
+  - **Kubernetes Go Client:** API server interaction
+  - **OpenAI API (GPT-4 Turbo):** Command safety validation
+  - **kubectl Wrapper:** Command execution interface
+  - **Retry Logic Library:** Failed operation handling
 - **Output:** Applied fixes + execution status → Message Queue
 
 ### 4. **✅ Validator Agent**
 - **Function:** Remediation sonuçlarını verify eder ve success/failure determine eder
 - **Implementation:** Post-fix monitoring + GPT-4 Turbo (success evaluation)
 - **AI Model:** GPT-4 Turbo - System state analysis ve rollback decision making
+- **Technology Stack:**
+  - **Kubernetes Informers:** Resource state monitoring
+  - **OpenAI API (GPT-4 Turbo):** Success evaluation logic
+  - **PostgreSQL Driver:** Audit log storage
+  - **Prometheus Client:** Metrics collection
 - **Output:** Validation results + audit logs → System
 
 ---
