@@ -143,6 +143,8 @@ K8sGPT'nin tespit ettiği hataları AI agent'lar ile tamamen otomatik çözecek 
 - **Controller Manager:** Reconcile loop
 - **client-go:** Kubernetes API erişimi
 
+Sistem, Kubernetes-native bir yaklaşım benimser ve Operator Pattern kullanarak cluster'a entegre olur. **Custom Resource Definition (CRD)** ile `AutoFixPolicy` adında yeni bir Kubernetes kaynağı tanımlanır - bu kaynak hangi namespace'lerde hangi hata türlerinin otomatik düzeltileceğini belirtir. **Controller Manager** sürekli çalışan bir reconcile loop içinde cluster event'lerini dinler ve CRD'de tanımlanan policy'lere göre action alır. **client-go** library'si ile Kubernetes API'sine direkt erişim sağlanarak pod status'ları, event'ler ve resource durumları real-time takip edilir. Örneğin bir pod ImagePullBackOff durumuna düştüğünde, controller bu event'i yakalar, CRD policy'sini kontrol eder, eğer bu hata tipi için auto-fix enabled ise K8sGPT agent'ını tetikler ve çözüm uygulandıktan sonra pod'un Running durumuna geçişini client-go ile validate eder. Bu yaklaşım sayesinde sistem kubectl komutları yerine native Kubernetes API kullanarak hem daha performanslı hem de daha güvenli operasyonlar gerçekleştirir.
+
 ### 3. Otomatik Çözüm Kategorileri
 - **Image Pull Errors:** Tag düzeltme, registry auth
 - **Resource Issues:** Memory/CPU limit ayarlama
