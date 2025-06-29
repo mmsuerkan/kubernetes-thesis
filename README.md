@@ -143,7 +143,58 @@ K8sGPT'nin tespit ettiği hataları AI agent'lar ile tamamen otomatik çözecek 
 - **Controller Manager:** Reconcile loop
 - **client-go:** Kubernetes API erişimi
 
-Sistem, Kubernetes-native bir yaklaşım benimser ve Operator Pattern kullanarak cluster'a entegre olur. **Custom Resource Definition (CRD)** ile `AutoFixPolicy` adında yeni bir Kubernetes kaynağı tanımlanır - bu kaynak hangi namespace'lerde hangi hata türlerinin otomatik düzeltileceğini belirtir. **Controller Manager** sürekli çalışan bir reconcile loop içinde cluster event'lerini dinler ve CRD'de tanımlanan policy'lere göre action alır. **client-go** library'si ile Kubernetes API'sine direkt erişim sağlanarak pod status'ları, event'ler ve resource durumları real-time takip edilir. Örneğin bir pod ImagePullBackOff durumuna düştüğünde, controller bu event'i yakalar, CRD policy'sini kontrol eder, eğer bu hata tipi için auto-fix enabled ise K8sGPT agent'ını tetikler ve çözüm uygulandıktan sonra pod'un Running durumuna geçişini client-go ile validate eder. Bu yaklaşım sayesinde sistem kubectl komutları yerine native Kubernetes API kullanarak hem daha performanslı hem de daha güvenli operasyonlar gerçekleştirir.
+#### Kubernetes-Native Operator Pattern Akışı
+
+##### 1. **Sistem Kurulumu**
+```
+CRD Definition → AutoFixPolicy Resource → Controller Deployment
+```
+- `AutoFixPolicy` CRD cluster'a tanımlanır
+- Her namespace için policy configuration yapılır
+- Controller Manager cluster'a deploy edilir
+
+##### 2. **Real-Time Monitoring Loop**
+```
+client-go → Watch Events → Reconcile Loop → Policy Check
+```
+- Controller Manager sürekli çalışır
+- client-go ile Kubernetes API'yi dinler
+- Pod/Event değişikliklerini real-time yakalar
+- Her event için reconcile loop tetiklenir
+
+##### 3. **Hata Tespit ve Policy Kontrolü**
+```
+Pod Event → Event Analysis → CRD Policy Lookup → Action Decision
+```
+- Örnek: Pod ImagePullBackOff durumuna düşer
+- Controller event'i yakalar ve analiz eder
+- İlgili namespace'in AutoFixPolicy'sini kontrol eder
+- Policy'de auto-fix enabled mi diye bakar
+
+##### 4. **Otomatik Düzeltme Süreci**
+```
+Policy Match → K8sGPT Trigger → Solution Apply → Validation
+```
+- Eğer policy izin veriyorsa K8sGPT agent'ını tetikler
+- K8sGPT hata analizini yapar ve çözüm önerir
+- Controller çözümü Kubernetes API ile uygular
+- client-go ile pod durumunu validate eder
+
+##### 5. **Sonuç ve Logging**
+```
+Success Check → Status Update → Audit Log → Next Reconcile
+```
+- Pod'un Running durumuna geçişini kontrol eder
+- AutoFixPolicy resource'unun status'unu günceller
+- Audit log'a işlem kaydını yazar
+- Döngü devam eder, yeni event'leri bekler
+
+##### Avantajları
+- ✅ **Native Performance**: kubectl yerine direct API access
+- ✅ **Event-Driven**: Anında tepki, polling yok
+- ✅ **Policy-Based**: Namespace bazında kontrol
+- ✅ **Secure**: RBAC ile yetkilendirme
+- ✅ **Scalable**: Operator pattern ile cluster-wide çalışır
 
 ### 3. Otomatik Çözüm Kategorileri
 - **Image Pull Errors:** Tag düzeltme, registry auth
