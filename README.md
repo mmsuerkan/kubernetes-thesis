@@ -146,12 +146,14 @@ Sistem 4 ana bileşenden oluşur ve her biri belirli bir görevi yerine getirir:
 
 ### 3. **⚡ Executor Agent**
 - **Function:** AI recommendations'ı alır ve otomatik remediation uygular
-- **Implementation:** Kubernetes API calls ile infrastructure changes
+- **Implementation:** Kubernetes API calls + GPT-4 Turbo (command validation)
+- **AI Model:** GPT-4 Turbo - Risk assessment ve command safety validation
 - **Output:** Applied fixes + execution status → Message Queue
 
 ### 4. **✅ Validator Agent**
 - **Function:** Remediation sonuçlarını verify eder ve success/failure determine eder
-- **Implementation:** Post-fix monitoring + rollback logic
+- **Implementation:** Post-fix monitoring + GPT-4 Turbo (success evaluation)
+- **AI Model:** GPT-4 Turbo - System state analysis ve rollback decision making
 - **Output:** Validation results + audit logs → System
 
 ---
@@ -162,9 +164,20 @@ Sistem 4 ana bileşenden oluşur ve her biri belirli bir görevi yerine getirir:
 - **🟢 Go (Tavsiye Edilen):** Kubernetes'in kendi diliyle uyumlu, hızlı ve güvenli
 - **🟡 Python:** AI kütüphaneleri çok, ama Kubernetes için biraz yavaş
 
-### **AI Framework (Beyin)**
-- **LangChain + OpenAI:** Çözüm planları oluşturur
-- **CrewAI:** Birden fazla AI agent'ın koordinasyonu
+### **AI Framework (Intelligent Layer)**
+
+#### **Model Assignment Strategy:**
+| **Agent** | **AI Model** | **Use Case** | **Reasoning** |
+|-----------|--------------|--------------|---------------|
+| **Detector** | ❌ No AI Model | Rule-based event filtering | Deterministic logic sufficient |
+| **Analyzer** | **GPT-4** | Complex diagnosis & solution design | Comprehensive analysis capability |
+| **Executor** | **GPT-4 Turbo** | Command safety validation | Fast risk assessment needed |
+| **Validator** | **GPT-4 Turbo** | Success evaluation & rollback | Quick decision making required |
+
+#### **Framework Integration:**
+- **LangChain:** Agent communication ve prompt engineering
+- **CrewAI:** Multi-agent workflow orchestration  
+- **OpenAI API:** All GPT model access centralized
 
 ### **Kubernetes Entegrasyonu (Sinir Sistemi)**
 - **Operator Pattern:** Kubernetes'e doğal entegrasyon
