@@ -134,25 +134,25 @@ Sistem 4 ana bileşenden oluşur ve her biri belirli bir görevi yerine getirir:
 (Hata Tespiti)     (Çözüm Üretimi)    (Otomatik Fix)     (Doğrulama)
 ```
 
-### 1. **🔍 K8sGPT (Dedektif)**
-- **Görevi:** Cluster'daki tüm hataları bulur ve analiz eder
-- **Nasıl Çalışır:** Kubernetes'ten aldığı verileri GPT-4'e gönderir
-- **Çıktısı:** "Bu hata nedir?" ve "Neden oluştu?" sorularının cevabı
+### 1. **🔍 K8sGPT (Error Analyzer)**
+- **Function:** Cluster'daki tüm hataları tespit eder ve AI analizi yapar
+- **Implementation:** Kubernetes API verilerini GPT-4'e gönderir
+- **Output:** Structured error analysis ve root cause identification
 
-### 2. **🤖 AI Agent (Doktor)**  
-- **Görevi:** Hatanın çözümünü bulur ve karar verir
-- **Nasıl Çalışır:** K8sGPT'nin teşhisini alır, en uygun tedavi yöntemini belirler
-- **Çıktısı:** "Bu hatayı şu komutlarla çözebiliriz" planı
+### 2. **🤖 AI Agent (Solution Generator)**  
+- **Function:** Hatanın optimal çözümünü belirler ve execution plan oluşturur
+- **Implementation:** K8sGPT analysis'ini alır, solution library'den uygun fix'i seçer
+- **Output:** Executable remediation commands ve risk assessment
 
-### 3. **⚡ Executor (Tamirci)**
-- **Görevi:** AI Agent'ın önerdiği çözümü otomatik uygular
-- **Nasıl Çalışır:** Kubernetes API'sine komutlar gönderir
-- **Çıktısı:** Düzeltme işlemlerini gerçekleştirir
+### 3. **⚡ Executor (Automation Engine)**
+- **Function:** AI Agent'ın ürettiği çözümü otomatik olarak uygular
+- **Implementation:** Kubernetes API üzerinden infrastructure değişiklikleri yapar
+- **Output:** Applied configuration changes ve execution status
 
-### 4. **✅ Validator (Kontrol Memuru)**
-- **Görevi:** Düzeltmenin başarılı olup olmadığını kontrol eder
-- **Nasıl Çalışır:** Sistem durumunu tekrar kontrol eder
-- **Çıktısı:** "Sorun çözüldü" ✅ veya "Geri al" ❌ kararı
+### 4. **✅ Validator (Verification System)**
+- **Function:** Uygulanan çözümün başarı durumunu verify eder
+- **Implementation:** Post-fix system state'i monitor eder ve success criteria check eder
+- **Output:** Validation result (success/failure) ve rollback trigger
 
 ---
 
