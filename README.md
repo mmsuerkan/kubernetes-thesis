@@ -175,18 +175,16 @@ Sistem 4 ana bileşenden oluşur ve her biri belirli bir görevi yerine getirir:
 
 ## 🚀 Kubernetes-Native Sistem Nasıl Çalışır?
 
-> **Analoji:** Bu sistem, hastanedeki 7/24 çalışan bir doktor ekibi gibidir. Sürekli hastaları (pod'ları) izler, hastalık belirtilerini tespit eder, teşhis koyar ve tedavi eder.
-
-### **1️⃣ Sistem Kurulumu (Hastane İnşaatı)**
+### **1️⃣ Sistem Kurulumu**
 
 ```
-📋 Kurallar Tanımla → 🏥 Hastane Kur → 👨‍⚕️ Doktor Görevlendir
+📋 Policy Tanımla → 🏗️ Infrastructure Kur → 🤖 Controller Deploy Et
 ```
 
 **Ne Yapılır:**
-- **AutoFixPolicy:** "Hangi hastalıkları tedavi edeceğiz?" kuralları yazılır
-- **CRD (Custom Resource Definition):** Kubernetes'e yeni bir kavram öğretilir
-- **Controller:** 7/24 nöbet tutan doktor hastaneye yerleştirilir
+- **AutoFixPolicy:** Hangi hata türlerinin otomatik düzeltileceği kuralları yazılır
+- **CRD (Custom Resource Definition):** Kubernetes'e yeni kaynak tipi öğretilir
+- **Controller:** Sürekli çalışan monitoring ve automation sistemi kurulur
 
 **Örnek Kural:**
 ```yaml
@@ -197,56 +195,56 @@ auto-fix-enabled:
   - OutOfMemory: false  # Bu hataya dokunma
 ```
 
-### **2️⃣ Sürekli İzleme (Hasta Takibi)**
+### **2️⃣ Real-Time Monitoring**
 
 ```
-👀 Gözlem → 📊 Veri Toplama → 🔄 Sürekli Kontrol → 📋 Kayıt Tutma
+👀 Event Watch → 📊 Data Collection → 🔄 Continuous Check → 📋 Logging
 ```
 
-**Ne Olur:**
-- **client-go:** Kubernetes'teki her değişikliği saniyede 100+ kez kontrol eder
-- **Watch Events:** "Yeni hasta geldi!" bildirimlerini yakalar
-- **Reconcile Loop:** Her bildirimde "Ne yapmam gerek?" diye sorar
-- **Policy Check:** Kuralları kontrol eder: "Bu hastayı tedavi edebilir miyim?"
+**Süreç:**
+- **client-go:** Kubernetes API'yi sürekli dinler (saniyede 100+ kontrol)
+- **Watch Events:** Sistem değişikliklerini anında yakalar
+- **Reconcile Loop:** Her event için "Aksiyon gerekli mi?" kontrolü yapar
+- **Policy Check:** Tanımlı kurallara göre karar verir
 
-**Gerçek Hayat Örneği:**
+**Örnek Event Timeline:**
 ```
 11:30:25 - Pod "web-app" oluşturuldu ✅
-11:30:27 - Pod "web-app" ImagePullBackOff durumunda ❌
-11:30:28 - Controller: "Yeni hasta! Teşhis gerekli."
+11:30:27 - Pod "web-app" ImagePullBackOff durumuna düştü ❌
+11:30:28 - Controller: Event yakalandı, analiz başlatılıyor
 ```
 
-### **3️⃣ Hata Tespiti ve Karar Verme (Teşhis)**
+### **3️⃣ Error Detection & Decision Making**
 
 ```
-🚨 Alarm → 🔍 İnceleme → 📋 Kural Kontrolü → ⚖️ Karar
+🚨 Alert → 🔍 Analysis → 📋 Policy Check → ⚖️ Decision
 ```
 
 **Adım Adım Süreç:**
-1. **Event Yakalama:** "Pod ImagePullBackOff durumunda!"
-2. **Hata Analizi:** "Bu ne demek? Neden oldu?"
-3. **Policy Kontrolü:** "Bu hatayı düzeltmem için izin var mı?"
-4. **Karar:** "Evet, otomatik düzeltme başlatılsın!"
+1. **Event Detection:** Pod ImagePullBackOff durumuna düştü
+2. **Error Analysis:** Hatanın root cause analizi yapılır
+3. **Policy Validation:** AutoFixPolicy kuralları kontrol edilir
+4. **Decision:** Otomatik düzeltme için go/no-go kararı
 
-**Örnek Senaryo:**
+**Örnek Scenario:**
 ```
-❌ Pod Durumu: ImagePullBackOff
-🔍 Tespit: "nginx:nonexistent-tag" image'ı bulunamıyor
-📋 Policy: "ImagePullBackOff → Auto-fix: ENABLED"
-⚖️ Karar: "Tedavi başlatılsın!"
-```
-
-### **4️⃣ Otomatik Düzeltme (Tedavi)**
-
-```
-🎯 Hedef Belirleme → 🤖 AI Çağırma → 💊 Çözüm Uygulama → ✅ Sonuç Kontrolü
+❌ Pod Status: ImagePullBackOff
+🔍 Root Cause: "nginx:nonexistent-tag" image bulunamıyor
+📋 Policy Check: "ImagePullBackOff → Auto-fix: ENABLED"
+⚖️ Decision: "Otomatik düzeltme başlatılsın"
 ```
 
-**Ne Yapar:**
-1. **K8sGPT Çağrısı:** "Bu sorunu nasıl çözeriz?"
-2. **AI Analizi:** GPT-4: "Image tag'ini 'latest' olarak değiştirin"
-3. **Komut Üretimi:** `kubectl patch deployment web-app...`
-4. **Otomatik Uygulama:** Komutu Kubernetes'e gönderir
+### **4️⃣ Automated Remediation**
+
+```
+🎯 Target Identification → 🤖 AI Analysis → 💊 Solution Apply → ✅ Result Check
+```
+
+**İşlem Adımları:**
+1. **K8sGPT Integration:** AI-powered error analysis ve solution generation
+2. **Solution Generation:** GPT-4: "Image tag'ini 'latest' olarak değiştir"
+3. **Command Execution:** Otomatik `kubectl patch` komutu üretimi
+4. **API Application:** Kubernetes API üzerinden düzeltme uygulama
 
 **Gerçek Düzeltme Örneği:**
 ```bash
@@ -254,17 +252,17 @@ auto-fix-enabled:
 kubectl patch deployment web-app -p '{"spec":{"template":{"spec":{"containers":[{"name":"web","image":"nginx:latest"}]}}}}'
 ```
 
-### **5️⃣ Doğrulama ve Takip (İyileşme Kontrolü)**
+### **5️⃣ Validation & Monitoring**
 
 ```
-⏱️ Bekleme → 🔍 Kontrol → 📊 Sonuç → 📝 Rapor
+⏱️ Wait → 🔍 Verify → 📊 Assessment → 📝 Report
 ```
 
-**Süreç:**
-1. **Bekleme:** Düzeltme işleminden sonra 30 saniye bekler
-2. **Durum Kontrolü:** Pod'un durumunu tekrar kontrol eder
-3. **Başarı Değerlendirmesi:** "Running" durumunda mı?
-4. **Kayıt Tutma:** Sonucu loglar ve raporlar
+**Validation Process:**
+1. **Grace Period:** Düzeltme sonrası 30 saniye bekleme
+2. **Status Check:** Pod durumunun "Running" olması kontrol edilir
+3. **Success Assessment:** Düzeltmenin başarı durumu değerlendirilir
+4. **Audit Logging:** Tüm işlemler audit trail'e kaydedilir
 
 **Başarı Senaryosu:**
 ```
@@ -273,6 +271,99 @@ kubectl patch deployment web-app -p '{"spec":{"template":{"spec":{"containers":[
 ✅ Fix Applied: Image tag updated to 'latest'
 ✅ Audit Log: Operation completed successfully
 ```
+
+---
+
+## 📡 Message Queue Infrastructure
+
+### **Communication Architecture**
+
+Sistem bileşenleri arasındaki iletişim **asynchronous message queue** üzerinden gerçekleşir:
+
+```
+Detector Agent → Redis Stream → K8sGPT Agent → Redis Stream → 
+Fixer Agent → Redis Stream → Validator Agent
+```
+
+### **Technology Stack**
+
+#### **1. Message Queue Options**
+| **Teknoloji** | **Avantaj** | **Kullanım Durumu** |
+|---------------|-------------|---------------------|
+| **🟢 Redis Streams** | Kubernetes-native, hızlı, basit | Önerilen çözüm |
+| **🟡 RabbitMQ** | Enterprise features, routing | Complex workflow'lar |
+| **🟠 Apache Kafka** | High-throughput, distributed | Büyük scale sistemler |
+
+#### **2. Queue Topics & Message Flow**
+
+```yaml
+# Message Queue Channels
+crash-events:
+  - source: Detector Agent
+  - target: K8sGPT Agent
+  - payload: {"namespace": "default", "pod": "web-app", "error": "ImagePullBackOff"}
+
+analysis-results:
+  - source: K8sGPT Agent  
+  - target: Fixer Agent
+  - payload: {"analysis": "Image not found", "solution": "update-image-tag", "confidence": 0.95}
+
+fix-commands:
+  - source: Fixer Agent
+  - target: Validator Agent
+  - payload: {"command": "kubectl patch...", "timestamp": "2024-01-01T10:30:00Z", "applied": true}
+
+validation-results:
+  - source: Validator Agent
+  - target: System Logs
+  - payload: {"status": "success", "duration": "45s", "pod_status": "Running"}
+```
+
+#### **3. Deployment Configuration**
+
+**Redis StatefulSet (Kubernetes):**
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-message-queue
+spec:
+  serviceName: redis-service
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      resources:
+        requests:
+          storage: 10Gi
+```
+
+#### **4. Message Persistence & Reliability**
+
+- **Durability:** Redis AOF persistence enabled
+- **Retry Mechanism:** Failed message'lar için 3x retry policy
+- **Dead Letter Queue:** Sürekli başarısız olan message'lar için separate queue
+- **Monitoring:** Queue depth ve processing time metrikleri
+
+#### **5. Performance Specifications**
+
+| **Metric** | **Target** | **Monitoring** |
+|------------|------------|----------------|
+| **Message Latency** | < 100ms | Redis latency monitoring |
+| **Queue Throughput** | 1000+ msg/sec | Custom Prometheus metrics |
+| **Memory Usage** | < 2GB | Kubernetes resource monitoring |
+| **Persistence** | 99.9% durability | AOF sync verification |
 
 ---
 
