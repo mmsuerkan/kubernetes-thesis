@@ -422,28 +422,7 @@ spec:
 - **Kubernetes Operator:** Native integration
 - **RBAC:** Güvenli yetkilendirme
 
-### 6. Yayın Kanalları
-- **GitHub:** Open source repository
-- **Docker Hub/GHCR:** Container registry
-- **Helm Repository:** Chart distribution
-- **OperatorHub:** Kubernetes marketplace
-- **Cloud Marketplaces:** AWS, Azure, GCP
-
-### 7. Enterprise Özellikler
-- **Multi-tenant:** Çok müşteri desteği
-- **Web Dashboard:** Yönetim arayüzü
-- **Analytics:** Performans raporları
-- **Integrations:** Slack, JIRA, Prometheus
-
-### 8. Development Timeline
-- **Hafta 1-2:** Backend + K8sGPT entegrasyonu
-- **Hafta 3-4:** AI agent logic + OpenAI
-- **Hafta 5-6:** Kubernetes operator geliştirme
-- **Hafta 7-8:** Güvenlik + test senaryoları
-- **Hafta 9-10:** Dokümantasyon + paketleme
-- **Hafta 11-12:** Community release + geri bildirim
-
-### 9. Başarı Kriterleri
+### 6. Başarı Kriterleri
 - Yaygın K8s hatalarında %90+ otomatik çözüm oranı
 - Production-ready güvenlik standartları
 - Community adoption (GitHub stars, downloads)
