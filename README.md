@@ -130,29 +130,29 @@ Kubernetes cluster'larında meydana gelen hataları **tamamen otomatik** olarak 
 Sistem 4 ana bileşenden oluşur ve her biri belirli bir görevi yerine getirir:
 
 ```
-🔍 K8sGPT        →  🤖 AI Agent      →  ⚡ Executor     →  ✅ Validator
-(Hata Tespiti)     (Çözüm Üretimi)    (Otomatik Fix)     (Doğrulama)
+🔍 Detector Agent  →  🤖 Analyzer Agent  →  ⚡ Executor Agent  →  ✅ Validator Agent
+(Event Detection)   (AI Analysis)        (Auto Remediation)   (Verification)
 ```
 
-### 1. **🔍 K8sGPT (Error Analyzer)**
-- **Function:** Cluster'daki tüm hataları tespit eder ve AI analizi yapar
-- **Implementation:** Kubernetes API verilerini GPT-4'e gönderir
-- **Output:** Structured error analysis ve root cause identification
+### 1. **🔍 Detector Agent**
+- **Function:** Kubernetes event'lerini sürekli monitor eder ve anomali tespit eder
+- **Implementation:** client-go ile Watch API kullanarak real-time event streaming
+- **Output:** Structured error events → Message Queue
 
-### 2. **🤖 AI Agent (Solution Generator)**  
-- **Function:** Hatanın optimal çözümünü belirler ve execution plan oluşturur
-- **Implementation:** K8sGPT analysis'ini alır, solution library'den uygun fix'i seçer
-- **Output:** Executable remediation commands ve risk assessment
+### 2. **🤖 Analyzer Agent (K8sGPT + AI)**  
+- **Function:** Error events'i alır, AI-powered root cause analysis yapar
+- **Implementation:** K8sGPT + GPT-4 integration ile intelligent diagnosis
+- **Output:** Diagnostic report + remediation recommendations → Message Queue
 
-### 3. **⚡ Executor (Automation Engine)**
-- **Function:** AI Agent'ın ürettiği çözümü otomatik olarak uygular
-- **Implementation:** Kubernetes API üzerinden infrastructure değişiklikleri yapar
-- **Output:** Applied configuration changes ve execution status
+### 3. **⚡ Executor Agent**
+- **Function:** AI recommendations'ı alır ve otomatik remediation uygular
+- **Implementation:** Kubernetes API calls ile infrastructure changes
+- **Output:** Applied fixes + execution status → Message Queue
 
-### 4. **✅ Validator (Verification System)**
-- **Function:** Uygulanan çözümün başarı durumunu verify eder
-- **Implementation:** Post-fix system state'i monitor eder ve success criteria check eder
-- **Output:** Validation result (success/failure) ve rollback trigger
+### 4. **✅ Validator Agent**
+- **Function:** Remediation sonuçlarını verify eder ve success/failure determine eder
+- **Implementation:** Post-fix monitoring + rollback logic
+- **Output:** Validation results + audit logs → System
 
 ---
 
@@ -281,8 +281,8 @@ kubectl patch deployment web-app -p '{"spec":{"template":{"spec":{"containers":[
 Sistem bileşenleri arasındaki iletişim **asynchronous message queue** üzerinden gerçekleşir:
 
 ```
-Detector Agent → Redis Stream → K8sGPT Agent → Redis Stream → 
-Fixer Agent → Redis Stream → Validator Agent
+Detector Agent → Redis Stream → Analyzer Agent → Redis Stream → 
+Executor Agent → Redis Stream → Validator Agent
 ```
 
 ### **Technology Stack**
@@ -300,16 +300,16 @@ Fixer Agent → Redis Stream → Validator Agent
 # Message Queue Channels
 crash-events:
   - source: Detector Agent
-  - target: K8sGPT Agent
+  - target: Analyzer Agent
   - payload: {"namespace": "default", "pod": "web-app", "error": "ImagePullBackOff"}
 
 analysis-results:
-  - source: K8sGPT Agent  
-  - target: Fixer Agent
+  - source: Analyzer Agent  
+  - target: Executor Agent
   - payload: {"analysis": "Image not found", "solution": "update-image-tag", "confidence": 0.95}
 
-fix-commands:
-  - source: Fixer Agent
+execution-results:
+  - source: Executor Agent
   - target: Validator Agent
   - payload: {"command": "kubectl patch...", "timestamp": "2024-01-01T10:30:00Z", "applied": true}
 
