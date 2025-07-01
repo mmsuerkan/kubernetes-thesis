@@ -8,6 +8,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/k8s"
+	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/analyzer"
 )
 
 var (
@@ -72,8 +73,39 @@ Example:
 			color.Red("❌ Pod has error: %s", reason)
 			
 			if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
-				color.Yellow("🎯 ImagePullBackOff detected - this is what MVP can fix!")
-				color.Blue("📋 Next step: Add K8sGPT analysis")
+				color.Yellow("🎯 ImagePullBackOff detected - running AI analysis...")
+				
+				// Create K8sGPT analyzer  
+				k8sgptClient := analyzer.NewK8sGPTClient("../k8sgpt.exe")
+				
+				// Test K8sGPT binary
+				if err := k8sgptClient.TestK8sGPT(ctx); err != nil {
+					color.Red("❌ K8sGPT not available: %v", err)
+					color.White("💡 Make sure k8sgpt.exe is in the parent directory")
+					os.Exit(1)
+				}
+				
+				// Run K8sGPT analysis
+				analysis, err := k8sgptClient.AnalyzePod(ctx, pod)
+				if err != nil {
+					color.Red("❌ K8sGPT analysis failed: %v", err)
+					// Continue with basic detection
+					color.Yellow("🔧 Falling back to basic fix logic")
+				} else {
+					// Display AI analysis results
+					color.Green("✅ AI Analysis completed!")
+					color.White("📊 Error Type: %s", analysis.ErrorType)
+					color.White("📝 Details: %s", analysis.ErrorDetails)
+					color.White("💡 Recommendation: %s", analysis.Recommendation)
+					color.White("🎯 Confidence: %.0f%%", analysis.Confidence*100)
+					
+					if analysis.CanAutoFix {
+						color.Green("🚀 This error can be automatically fixed!")
+						color.Blue("📋 Next step: Apply automatic fix")
+					} else {
+						color.Yellow("⚠️  This error requires manual intervention")
+					}
+				}
 			} else {
 				color.Yellow("⚠️  Error type '%s' not supported in MVP", reason)
 			}
