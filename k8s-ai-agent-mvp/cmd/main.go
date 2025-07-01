@@ -29,11 +29,13 @@ Currently supports:
 
 var fixCmd = &cobra.Command{
 	Use:   "fix-pod",
-	Short: "Fix a specific pod with ImagePullBackOff error",
+	Short: "Fix pods with ImagePullBackOff error",
 	Long: `Automatically detect and fix ImagePullBackOff errors in Kubernetes pods.
 
-Example:
-  k8s-ai-agent fix-pod --pod=broken-pod --namespace=default`,
+Examples:
+  k8s-ai-agent fix-pod --pod=broken-pod --namespace=default    # Fix specific pod
+  k8s-ai-agent fix-pod --namespace=default                     # Auto-detect failed pods
+  k8s-ai-agent fix-pod                                         # Auto-detect in all namespaces`,
 	Run: func(cmd *cobra.Command, args []string) {
 		color.Yellow("🔍 Connecting to Kubernetes cluster...")
 		
