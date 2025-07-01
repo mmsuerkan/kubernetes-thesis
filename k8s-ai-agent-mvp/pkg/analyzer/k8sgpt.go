@@ -197,7 +197,7 @@ func (c *K8sGPTClient) processAnalysis(analysis K8sGPTAnalysis, pod *corev1.Pod)
 // detectErrorType identifies the type of error and if it can be auto-fixed
 func (c *K8sGPTClient) detectErrorType(errorText string) (string, bool) {
 	// ImagePullBackOff detection
-	if contains(errorText, []string{"ImagePullBackOff", "ErrImagePull", "pull"}) {
+	if contains(errorText, []string{"ImagePullBackOff", "ErrImagePull", "pull", "manifest", "not found"}) {
 		return "ImagePullBackOff", true
 	}
 	

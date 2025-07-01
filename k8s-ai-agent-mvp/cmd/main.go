@@ -9,11 +9,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/k8s"
 	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/analyzer"
+	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/executor"
 )
 
 var (
 	podName   string
 	namespace string
+	dryRun    bool
+	autoFix   bool
 )
 
 var rootCmd = &cobra.Command{
@@ -29,13 +32,14 @@ Currently supports:
 
 var fixCmd = &cobra.Command{
 	Use:   "fix-pod",
-	Short: "Fix pods with ImagePullBackOff error",
-	Long: `Automatically detect and fix ImagePullBackOff errors in Kubernetes pods.
+	Short: "Analyze and fix pods with ImagePullBackOff error",
+	Long: `Analyze and automatically fix ImagePullBackOff errors in Kubernetes pods using AI.
 
 Examples:
-  k8s-ai-agent fix-pod --pod=broken-pod --namespace=default    # Fix specific pod
-  k8s-ai-agent fix-pod --namespace=default                     # Auto-detect failed pods
-  k8s-ai-agent fix-pod                                         # Auto-detect in all namespaces`,
+  k8s-ai-agent fix-pod --pod=broken-pod --namespace=default              # Analyze only
+  k8s-ai-agent fix-pod --pod=broken-pod --auto-fix                       # Analyze and fix
+  k8s-ai-agent fix-pod --pod=broken-pod --auto-fix --dry-run             # Show what would be fixed
+  k8s-ai-agent fix-pod --pod=broken-pod --namespace=default --auto-fix   # Fix specific pod`,
 	Run: func(cmd *cobra.Command, args []string) {
 		color.Yellow("🔍 Connecting to Kubernetes cluster...")
 		
@@ -103,7 +107,52 @@ Examples:
 					
 					if analysis.CanAutoFix {
 						color.Green("🚀 This error can be automatically fixed!")
-						color.Blue("📋 Next step: Apply automatic fix")
+						
+						if autoFix {
+							color.Blue("🔧 Starting automatic fix...")
+							
+							// Create executor client
+							executorClient, err := executor.NewExecutorClient()
+							if err != nil {
+								color.Red("❌ Failed to create executor: %v", err)
+								os.Exit(1)
+							}
+							
+							// Set dry-run mode if specified
+							executorClient.SetDryRun(dryRun)
+							
+							// Apply the fix
+							fixResult, err := executorClient.FixImagePullBackOff(ctx, pod)
+							if err != nil {
+								color.Red("❌ Fix failed: %v", err)
+								os.Exit(1)
+							}
+							
+							// Display fix results
+							if fixResult.Success {
+								color.Green("✅ Fix applied successfully!")
+								color.White("🔄 %s", fixResult.FixApplied)
+								color.White("📝 %s", fixResult.Message)
+								
+								if !dryRun {
+									// Validate the fix
+									color.Yellow("⏳ Validating fix...")
+									validationResult, err := executorClient.ValidateFix(ctx, namespace, podName, 180*time.Second)
+									if err != nil {
+										color.Red("❌ Fix validation failed: %v", err)
+									} else if validationResult.Success {
+										color.Green("✅ Fix validation successful!")
+										color.White("📊 %s", validationResult.Message)
+									} else {
+										color.Yellow("⚠️  Fix validation failed: %s", validationResult.Message)
+									}
+								}
+							} else {
+								color.Red("❌ Fix failed: %s", fixResult.Message)
+							}
+						} else {
+							color.Blue("📋 Use --auto-fix flag to apply automatic fix")
+						}
 					} else {
 						color.Yellow("⚠️  This error requires manual intervention")
 					}
@@ -131,6 +180,8 @@ func init() {
 	// Add flags to fix-pod command
 	fixCmd.Flags().StringVarP(&podName, "pod", "p", "", "Pod name to fix (required)")
 	fixCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Namespace of the pod")
+	fixCmd.Flags().BoolVar(&autoFix, "auto-fix", false, "Automatically apply fixes (default: analysis only)")
+	fixCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be fixed without applying changes")
 	fixCmd.MarkFlagRequired("pod")
 	
 	// Add commands to root
