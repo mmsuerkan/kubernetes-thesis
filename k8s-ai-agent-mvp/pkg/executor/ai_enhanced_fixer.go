@@ -145,7 +145,7 @@ func (ai *AIEnhancedExecutor) FixWithAI(ctx context.Context, pod *corev1.Pod, er
 // generateAIFix creates an AI-powered fix strategy using GPT-4 Turbo
 func (ai *AIEnhancedExecutor) generateAIFix(ctx context.Context, pod *corev1.Pod, errorType string) (*AIGeneratedFix, error) {
 	// Create context with much longer timeout for OpenAI API call
-	apiCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	apiCtx, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
 	
 	prompt := ai.buildPrompt(pod, errorType)

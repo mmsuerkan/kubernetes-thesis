@@ -50,8 +50,8 @@ func NewExecutorClient() (*ExecutorClient, error) {
 		}
 	}
 	
-	// Increase timeout for slow clusters
-	config.Timeout = 60 * time.Second
+	// Increase timeout for slow clusters and network issues
+	config.Timeout = 180 * time.Second
 	
 	// Disable rate limiting for local development
 	config.QPS = 100
