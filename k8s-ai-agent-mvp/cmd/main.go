@@ -207,7 +207,7 @@ Examples:
 										}
 									}
 									
-									validationResult, err = executorClient.ValidateFix(ctx, namespace, podName, 180*time.Second)
+									validationResult, err = executorClient.ValidateFix(ctx, namespace, podName, 300*time.Second)
 									if err != nil {
 										color.Red("❌ Fix validation failed: %v", err)
 									} else if validationResult.Success {

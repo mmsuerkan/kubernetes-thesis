@@ -492,7 +492,7 @@ func (e *ExecutorClient) recreatePod(ctx context.Context, oldPod, newPod *corev1
 	}
 
 	// Wait a moment for deletion
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	// Create the new pod
 	color.Yellow("🚀 Creating new pod with fix...")
@@ -501,6 +501,8 @@ func (e *ExecutorClient) recreatePod(ctx context.Context, oldPod, newPod *corev1
 		return fmt.Errorf("failed to create new pod: %w", err)
 	}
 
+	// Wait for pod creation to initialize
+	time.Sleep(5 * time.Second)
 	color.Green("✅ Pod recreated with fix!")
 	return nil
 }
