@@ -23,6 +23,8 @@ var (
 	allNamespaces bool
 	analyzeOnly   bool
 	maxConcurrent int
+	aiMode        bool
+	openaiAPIKey  string
 )
 
 var rootCmd = &cobra.Command{
@@ -38,14 +40,20 @@ Currently supports:
 
 var fixCmd = &cobra.Command{
 	Use:   "fix-pod",
-	Short: "Analyze and fix pods with ImagePullBackOff error",
-	Long: `Analyze and automatically fix ImagePullBackOff errors in Kubernetes pods using AI.
+	Short: "Analyze and fix pods with various Kubernetes errors",
+	Long: `Analyze and automatically fix Kubernetes pod errors using AI-powered strategies.
+
+Supported error types:
+  - ImagePullBackOff (Traditional + AI mode)
+  - CrashLoopBackOff (Traditional + AI mode)
+  - OOMKilled, Evicted, etc. (AI mode only)
 
 Examples:
   k8s-ai-agent fix-pod --pod=broken-pod --namespace=default              # Analyze only
-  k8s-ai-agent fix-pod --pod=broken-pod --auto-fix                       # Analyze and fix
-  k8s-ai-agent fix-pod --pod=broken-pod --auto-fix --dry-run             # Show what would be fixed
-  k8s-ai-agent fix-pod --pod=broken-pod --namespace=default --auto-fix   # Fix specific pod`,
+  k8s-ai-agent fix-pod --pod=broken-pod --auto-fix                       # Traditional fix
+  k8s-ai-agent fix-pod --pod=broken-pod --auto-fix --ai-mode             # AI-enhanced fix
+  k8s-ai-agent fix-pod --pod=broken-pod --auto-fix --dry-run             # Preview changes
+  k8s-ai-agent fix-pod --pod=broken-pod --ai-mode --openai-key=sk-...    # AI with custom key`,
 	Run: func(cmd *cobra.Command, args []string) {
 		color.Yellow("🔍 Connecting to Kubernetes cluster...")
 		
@@ -84,8 +92,11 @@ Examples:
 			reason := client.GetPodErrorReason(pod)
 			color.Red("❌ Pod has error: %s", reason)
 			
-			if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
-				color.Yellow("🎯 ImagePullBackOff detected - running AI analysis...")
+			// Handle different error types based on mode
+			supportedInTraditional := reason == "ImagePullBackOff" || reason == "ErrImagePull" || reason == "CrashLoopBackOff"
+			
+			if supportedInTraditional || aiMode {
+				color.Yellow("🎯 %s detected - running analysis...", reason)
 				
 				// Create K8sGPT analyzer  
 				k8sgptClient := analyzer.NewK8sGPTClient("../k8sgpt.exe")
@@ -117,33 +128,86 @@ Examples:
 						if autoFix {
 							color.Blue("🔧 Starting automatic fix...")
 							
-							// Create executor client
-							executorClient, err := executor.NewExecutorClient()
-							if err != nil {
-								color.Red("❌ Failed to create executor: %v", err)
-								os.Exit(1)
+							// Declare variables for fix result and executor
+							var fixResult *executor.FixResult
+							var executorClient *executor.ExecutorClient
+							
+							// Create executor client (AI-enhanced or standard)
+							if aiMode {
+								color.Blue("🤖 Using AI-Enhanced mode with GPT-4 Turbo")
+								
+								// Get OpenAI API key
+								apiKey := openaiAPIKey
+								if apiKey == "" {
+									apiKey = os.Getenv("OPENAI_API_KEY")
+								}
+								if apiKey == "" {
+									color.Red("❌ OpenAI API key required for AI mode")
+									color.White("💡 Set OPENAI_API_KEY environment variable or use --openai-key flag")
+									os.Exit(1)
+								}
+								
+								// Create AI-enhanced executor
+								aiExecutor, err := executor.NewAIEnhancedExecutor(apiKey)
+								if err != nil {
+									color.Red("❌ Failed to create AI-enhanced executor: %v", err)
+									os.Exit(1)
+								}
+								
+								// Set dry-run mode if specified
+								aiExecutor.SetDryRun(dryRun)
+								
+								// Apply AI-powered fix
+								fixResult, err = aiExecutor.FixWithAI(ctx, pod, reason)
+							} else {
+								// Standard executor
+								var err error
+								executorClient, err = executor.NewExecutorClient()
+								if err != nil {
+									color.Red("❌ Failed to create executor: %v", err)
+									os.Exit(1)
+								}
+								
+								// Set dry-run mode if specified
+								executorClient.SetDryRun(dryRun)
+								
+								// Apply the traditional fix based on error type
+								switch reason {
+								case "ImagePullBackOff", "ErrImagePull":
+									fixResult, err = executorClient.FixImagePullBackOff(ctx, pod)
+								case "CrashLoopBackOff":
+									fixResult, err = executorClient.FixCrashLoopBackOff(ctx, pod)
+								default:
+									color.Red("❌ Error type '%s' not supported in traditional mode", reason)
+									color.White("💡 Try using --ai-mode for advanced error handling")
+									os.Exit(1)
+								}
 							}
-							
-							// Set dry-run mode if specified
-							executorClient.SetDryRun(dryRun)
-							
-							// Apply the fix
-							fixResult, err := executorClient.FixImagePullBackOff(ctx, pod)
 							if err != nil {
 								color.Red("❌ Fix failed: %v", err)
 								os.Exit(1)
 							}
 							
 							// Display fix results
-							if fixResult.Success {
+							if fixResult != nil && fixResult.Success {
 								color.Green("✅ Fix applied successfully!")
 								color.White("🔄 %s", fixResult.FixApplied)
 								color.White("📝 %s", fixResult.Message)
 								
 								if !dryRun {
-									// Validate the fix
+									// Validate the fix (use appropriate executor)
 									color.Yellow("⏳ Validating fix...")
-									validationResult, err := executorClient.ValidateFix(ctx, namespace, podName, 180*time.Second)
+									var validationResult *executor.FixResult
+									var err error
+									
+									if aiMode {
+										// For AI mode, we still need a basic executor for validation
+										if executorClient == nil {
+											executorClient, _ = executor.NewExecutorClient()
+										}
+									}
+									
+									validationResult, err = executorClient.ValidateFix(ctx, namespace, podName, 180*time.Second)
 									if err != nil {
 										color.Red("❌ Fix validation failed: %v", err)
 									} else if validationResult.Success {
@@ -153,8 +217,10 @@ Examples:
 										color.Yellow("⚠️  Fix validation failed: %s", validationResult.Message)
 									}
 								}
-							} else {
+							} else if fixResult != nil {
 								color.Red("❌ Fix failed: %s", fixResult.Message)
+							} else {
+								color.Red("❌ Fix failed: No result returned")
 							}
 						} else {
 							color.Blue("📋 Use --auto-fix flag to apply automatic fix")
@@ -164,7 +230,8 @@ Examples:
 					}
 				}
 			} else {
-				color.Yellow("⚠️  Error type '%s' not supported in MVP", reason)
+				color.Yellow("⚠️  Error type '%s' not supported in traditional mode", reason)
+				color.White("💡 Try using --ai-mode for advanced error handling with GPT-4 Turbo")
 			}
 		} else {
 			color.Green("✅ Pod is healthy - no errors detected")
@@ -177,9 +244,11 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		color.Cyan("k8s-ai-agent MVP v0.2.0")
+		color.Cyan("k8s-ai-agent MVP v0.3.0-ai-enhanced")
 		color.White("Built with Go " + "1.24.4")
 		color.White("Features: Watch Mode, Auto-Detection, Concurrent Fixing")
+		color.Green("🤖 NEW: AI-Enhanced Mode with GPT-4 Turbo")
+		color.White("AI Features: Dynamic command generation, advanced error handling")
 	},
 }
 
@@ -188,10 +257,15 @@ var watchCmd = &cobra.Command{
 	Short: "Continuously watch and fix pod errors",
 	Long: `Continuously monitor Kubernetes pods for errors and optionally fix them automatically.
 
+AI Mode Support:
+  - Traditional mode: ImagePullBackOff, CrashLoopBackOff
+  - AI-enhanced mode: All error types with GPT-4 Turbo
+
 Examples:
   k8s-ai-agent watch --namespace=default                    # Watch specific namespace
   k8s-ai-agent watch --all-namespaces                      # Watch all namespaces
   k8s-ai-agent watch --namespace=default --auto-fix        # Watch and auto-fix
+  k8s-ai-agent watch --auto-fix --ai-mode                  # AI-enhanced fixing
   k8s-ai-agent watch --analyze-only                        # Only analyze, no fixes
   k8s-ai-agent watch --auto-fix --max-concurrent=5         # Limit concurrent fixes`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -254,6 +328,8 @@ func init() {
 	fixCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Namespace of the pod")
 	fixCmd.Flags().BoolVar(&autoFix, "auto-fix", false, "Automatically apply fixes (default: analysis only)")
 	fixCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be fixed without applying changes")
+	fixCmd.Flags().BoolVar(&aiMode, "ai-mode", false, "Use AI-enhanced fixing with GPT-4 Turbo")
+	fixCmd.Flags().StringVar(&openaiAPIKey, "openai-key", "", "OpenAI API key (can also use OPENAI_API_KEY env var)")
 	fixCmd.MarkFlagRequired("pod")
 	
 	// Add flags to watch command
@@ -262,6 +338,8 @@ func init() {
 	watchCmd.Flags().BoolVar(&autoFix, "auto-fix", false, "Automatically apply fixes")
 	watchCmd.Flags().BoolVar(&analyzeOnly, "analyze-only", false, "Only analyze errors, don't fix")
 	watchCmd.Flags().IntVar(&maxConcurrent, "max-concurrent", 3, "Maximum concurrent fix operations")
+	watchCmd.Flags().BoolVar(&aiMode, "ai-mode", false, "Use AI-enhanced fixing with GPT-4 Turbo")
+	watchCmd.Flags().StringVar(&openaiAPIKey, "openai-key", "", "OpenAI API key (can also use OPENAI_API_KEY env var)")
 	
 	// Add commands to root
 	rootCmd.AddCommand(fixCmd)

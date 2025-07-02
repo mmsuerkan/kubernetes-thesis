@@ -49,6 +49,13 @@ func NewExecutorClient() (*ExecutorClient, error) {
 			return nil, fmt.Errorf("failed to create kubernetes config: %w", err)
 		}
 	}
+	
+	// Increase timeout for slow clusters
+	config.Timeout = 60 * time.Second
+	
+	// Disable rate limiting for local development
+	config.QPS = 100
+	config.Burst = 200
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -194,14 +201,26 @@ func (e *ExecutorClient) updatePodImage(ctx context.Context, pod *corev1.Pod, co
 		}
 	}
 
-	// Delete the old pod
+	// Delete the old pod with retry
 	color.Yellow("🗑️  Deleting old pod...")
 	deletePolicy := metav1.DeletePropagationForeground
-	err := e.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
-	})
+	
+	// Try multiple times
+	var err error
+	for i := 0; i < 3; i++ {
+		err = e.clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
+			PropagationPolicy: &deletePolicy,
+		})
+		if err == nil {
+			break
+		}
+		if i < 2 {
+			color.Yellow("⚠️  Delete attempt %d failed, retrying...", i+1)
+			time.Sleep(2 * time.Second)
+		}
+	}
 	if err != nil {
-		return fmt.Errorf("failed to delete old pod: %w", err)
+		return fmt.Errorf("failed to delete old pod after 3 attempts: %w", err)
 	}
 
 	// Wait a moment for deletion to complete
