@@ -266,11 +266,14 @@ kubectl get pods
 
 # 🤖 AI-ENHANCED MODE (New & Powerful)
 # GPT-4 Turbo powered dynamic fixing
-.\k8s-ai-agent.exe watch --namespace=default --auto-fix --ai-mode --openai-key=sk-...
+.\k8s-ai-agent.exe watch --namespace=default --auto-fix --ai-mode --openai-key=sk-your-openai-key
 
-# AI mode with environment variable
-export OPENAI_API_KEY=sk-...
+# AI mode with environment variable (recommended)
+export OPENAI_API_KEY=sk-your-openai-key
 .\k8s-ai-agent.exe watch --auto-fix --ai-mode
+
+# Complete example with full command
+.\k8s-ai-agent.exe watch --auto-fix --ai-mode --openai-key=sk-proj-your-openai-api-key-here
 
 # AI-enhanced single pod fixing with API key
 .\k8s-ai-agent.exe fix-pod --pod=broken-pod --auto-fix --ai-mode --openai-key="sk-proj-your-api-key"
