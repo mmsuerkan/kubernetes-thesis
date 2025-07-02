@@ -54,13 +54,22 @@ kubectl get nodes
 #### 4. Setup OpenAI API
 ```powershell
 # Get OpenAI API key from: https://platform.openai.com/api-keys
+
+# FOR K8sGPT (Traditional Analysis):
 # Configure K8sGPT with OpenAI
 .\k8sgpt.exe auth add openai
 # Enter your API key when prompted
 
-# Verify setup
+# Verify K8sGPT setup
 .\k8sgpt.exe auth list
 # Expected: openai configured
+
+# FOR AI-ENHANCED MODE (GPT-4 Turbo Direct Integration):
+# Option 1: Set environment variable
+export OPENAI_API_KEY=sk-proj-your-api-key-here
+
+# Option 2: Use command line flag
+# .\k8s-ai-agent.exe fix-pod --pod=test-pod --ai-mode --auto-fix --openai-key="sk-proj-your-api-key-here"
 ```
 
 ### Build and Run MVP
@@ -79,7 +88,30 @@ go build -o k8s-ai-agent.exe ./cmd
 # Expected: k8s-ai-agent MVP v0.3.0-ai-enhanced
 ```
 
-#### 2. Create Test Pods (Broken Images)
+#### 2. Quick AI Mode Test
+```powershell
+# Create a test pod with broken image
+kubectl run test-pod --image=nginx:this-tag-does-not-exist
+
+# Test AI-Enhanced Mode (replace with your API key)
+.\k8s-ai-agent.exe fix-pod --pod=test-pod --ai-mode --auto-fix --openai-key="sk-proj-your-api-key-here"
+
+# Expected AI Output:
+# 🤖 Starting AI-powered fix analysis for pod: test-pod
+# 🧠 Analyzing ImagePullBackOff error with GPT-3.5 Turbo...
+# ✅ AI analysis complete!
+# 🎯 Strategy: Replace invalid image tag 'this-tag-does-not-exist' with 'nginx:latest'
+# 📊 Confidence: 95.0% | Risk: low | Success Est.: 88.0%
+# 🚀 Executing AI-generated fix strategy...
+# ✅ Fix applied successfully!
+# ✅ Fix validation successful - pod is running!
+
+# Verify the fix worked
+kubectl get pods
+# Expected: test-pod   1/1   Running
+```
+
+#### 3. Create Test Pods (Broken Images)
 ```powershell
 # Create different types of broken pods for testing
 kubectl run test-nginx --image=nginx:nonexistent-tag
@@ -169,12 +201,15 @@ kubectl get pods
 # Traditional automatic fixing
 .\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix
 
-# AI-enhanced automatic fixing
+# AI-enhanced automatic fixing with API key
+.\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --ai-mode --openai-key="sk-proj-your-api-key"
+
+# AI mode with environment variable (recommended)
+export OPENAI_API_KEY=sk-proj-your-api-key
 .\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --ai-mode
 
-# AI mode with environment variable
-export OPENAI_API_KEY=sk-...
-.\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --ai-mode
+# Full example command format:
+.\k8s-ai-agent.exe fix-pod --pod=test-pod --ai-mode --auto-fix --openai-key="sk-proj-YOUR-OPENAI-API-KEY-HERE"
 
 # Verify the fix
 kubectl get pods
@@ -237,15 +272,22 @@ kubectl get pods
 export OPENAI_API_KEY=sk-...
 .\k8s-ai-agent.exe watch --auto-fix --ai-mode
 
-# AI-enhanced single pod fixing
+# AI-enhanced single pod fixing with API key
+.\k8s-ai-agent.exe fix-pod --pod=broken-pod --auto-fix --ai-mode --openai-key="sk-proj-your-api-key"
+
+# AI mode with environment variable
+export OPENAI_API_KEY=sk-proj-your-api-key
 .\k8s-ai-agent.exe fix-pod --pod=broken-pod --auto-fix --ai-mode
 
 # Dry-run AI mode (preview AI suggestions)
-.\k8s-ai-agent.exe fix-pod --pod=broken-pod --auto-fix --ai-mode --dry-run
+.\k8s-ai-agent.exe fix-pod --pod=broken-pod --auto-fix --ai-mode --dry-run --openai-key="sk-proj-your-api-key"
 
 # SINGLE POD MODE (Traditional)
 # Basic analysis
 .\k8s-ai-agent.exe fix-pod --pod=broken-pod
+
+# Traditional automatic fixing
+.\k8s-ai-agent.exe fix-pod --pod=broken-pod --auto-fix
 
 # Traditional dry-run test
 .\k8s-ai-agent.exe fix-pod --pod=broken-pod --auto-fix --dry-run
