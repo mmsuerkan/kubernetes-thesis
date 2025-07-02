@@ -177,8 +177,8 @@ kubectl get pods
 # Traditional analysis
 .\k8s-ai-agent.exe fix-pod --pod=test-nginx --namespace=default
 
-# AI-enhanced analysis
-.\k8s-ai-agent.exe fix-pod --pod=test-nginx --namespace=default --ai-mode
+# AI-enhanced analysis (requires API key)
+.\k8s-ai-agent.exe fix-pod --pod=test-nginx --namespace=default --ai-mode --openai-key="sk-proj-your-api-key"
 ```
 
 ### Dry-Run Mode (Safe Testing)
@@ -187,7 +187,7 @@ kubectl get pods
 .\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --dry-run
 
 # AI-enhanced dry-run (preview AI suggestions)
-.\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --ai-mode --dry-run
+.\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --ai-mode --dry-run --openai-key="sk-proj-your-api-key"
 
 # Expected Output (AI mode):
 # [... analysis output ...]
@@ -367,9 +367,12 @@ kubectl get pods
 # Create broken pod with complex error
 kubectl run test-pod --image=nginx:this-tag-does-not-exist
 
-# AI-enhanced fix
-export OPENAI_API_KEY=sk-...
+# AI-enhanced fix (Option 1: Environment variable)
+export OPENAI_API_KEY=sk-proj-your-api-key
 .\k8s-ai-agent.exe fix-pod --pod=test-pod --auto-fix --ai-mode
+
+# AI-enhanced fix (Option 2: Command line flag)
+.\k8s-ai-agent.exe fix-pod --pod=test-pod --auto-fix --ai-mode --openai-key="sk-proj-your-api-key"
 
 # Expected AI Output:
 # 🤖 Starting AI-powered fix analysis for pod: test-pod
@@ -389,7 +392,7 @@ kubectl get pods
 .\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --dry-run
 
 # AI-enhanced dry-run
-.\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --ai-mode --dry-run
+.\k8s-ai-agent.exe fix-pod --pod=test-nginx --auto-fix --ai-mode --dry-run --openai-key="sk-proj-your-api-key"
 
 # Verify no changes made
 kubectl get pods
@@ -452,10 +455,10 @@ kubectl run test-pod --image=nginx:nonexistent-tag
 #### "OpenAI API key required for AI mode"
 ```powershell
 # Set environment variable
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=sk-proj-your-api-key
 
 # Or use flag directly
-.\k8s-ai-agent.exe fix-pod --pod=test-pod --ai-mode --openai-key=sk-...
+.\k8s-ai-agent.exe fix-pod --pod=test-pod --ai-mode --auto-fix --openai-key="sk-proj-your-api-key"
 
 # Get API key from: https://platform.openai.com/api-keys
 ```
@@ -468,8 +471,8 @@ ping api.openai.com
 # Try traditional mode as fallback
 .\k8s-ai-agent.exe fix-pod --pod=test-pod --auto-fix
 
-# Increase timeout by retrying
-.\k8s-ai-agent.exe fix-pod --pod=test-pod --auto-fix --ai-mode
+# Retry AI mode with API key
+.\k8s-ai-agent.exe fix-pod --pod=test-pod --auto-fix --ai-mode --openai-key="sk-proj-your-api-key"
 ```
 
 ## 📁 Project Structure
@@ -531,7 +534,7 @@ C:\kubernetes-thesis\k8s-ai-agent-mvp> .\k8s-ai-agent.exe fix-pod --pod=test-ngi
 
 ### Expected Success Output (AI-Enhanced Mode)
 ```powershell
-C:\kubernetes-thesis\k8s-ai-agent-mvp> .\k8s-ai-agent.exe fix-pod --pod=test-pod --auto-fix --ai-mode
+C:\kubernetes-thesis\k8s-ai-agent-mvp> .\k8s-ai-agent.exe fix-pod --pod=test-pod --auto-fix --ai-mode --openai-key="sk-proj-your-api-key"
 🔍 Connecting to Kubernetes cluster...
 ✅ Connected to Kubernetes cluster!
 ✅ Pod found: test-pod
