@@ -188,6 +188,8 @@ func (c *K8sGPTClient) processAnalysis(analysis K8sGPTAnalysis, pod *corev1.Pod)
 		// Adjust confidence based on error type
 		if result.ErrorType == "ImagePullBackOff" {
 			result.Confidence = 0.98 // Very high confidence for AI-analyzed image errors
+		} else if result.ErrorType == "CrashLoopBackOff" {
+			result.Confidence = 0.95 // High confidence for crash errors
 		}
 	}
 	
@@ -207,8 +209,8 @@ func (c *K8sGPTClient) detectErrorType(errorText string) (string, bool) {
 	}
 	
 	// CrashLoopBackOff detection
-	if contains(errorText, []string{"CrashLoopBackOff", "crash", "restart"}) {
-		return "CrashLoopBackOff", false // Not supported in MVP
+	if contains(errorText, []string{"CrashLoopBackOff", "crash", "restart", "Error", "termination"}) {
+		return "CrashLoopBackOff", true // Now supported!
 	}
 	
 	return "Unknown", false
@@ -222,7 +224,7 @@ func (c *K8sGPTClient) generateRecommendation(errorType, errorText string) strin
 	case "OOMKilled":
 		return "Increase memory limits in pod specification"
 	case "CrashLoopBackOff":
-		return "Check application logs and fix startup issues"
+		return "Add initialization delay, fix command syntax, or increase resource limits based on exit code"
 	default:
 		return "Manual investigation required"
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -214,6 +215,274 @@ func (e *ExecutorClient) updatePodImage(ctx context.Context, pod *corev1.Pod, co
 	}
 
 	color.Green("✅ Pod recreated successfully!")
+	return nil
+}
+
+// FixCrashLoopBackOff attempts to fix CrashLoopBackOff errors
+func (e *ExecutorClient) FixCrashLoopBackOff(ctx context.Context, pod *corev1.Pod) (*FixResult, error) {
+	color.Yellow("🔧 Starting CrashLoopBackOff fix for pod: %s", pod.Name)
+	
+	result := &FixResult{
+		ErrorType:   "CrashLoopBackOff",
+		CanRollback: true,
+	}
+
+	// Find the crashing container
+	containerName, exitCode, err := e.analyzeCrashError(pod)
+	if err != nil {
+		result.Success = false
+		result.Message = fmt.Sprintf("Failed to analyze crash error: %v", err)
+		return result, err
+	}
+
+	color.Blue("📋 Found crashing container: %s with exit code: %d", containerName, exitCode)
+
+	// Determine fix strategy based on exit code
+	fixStrategy := e.determineCrashFix(pod, containerName, exitCode)
+	result.FixApplied = fixStrategy
+
+	color.Blue("💡 Fix strategy: %s", fixStrategy)
+
+	if e.dryRun {
+		color.Cyan("🧪 DRY-RUN MODE: Would apply fix: %s", fixStrategy)
+		result.Success = true
+		result.Message = fmt.Sprintf("DRY-RUN: Would fix CrashLoopBackOff with strategy: %s", fixStrategy)
+		return result, nil
+	}
+
+	// Apply the fix based on strategy
+	switch fixStrategy {
+	case "Add init delay":
+		err = e.addInitDelay(ctx, pod, containerName)
+	case "Increase memory limits":
+		err = e.increaseMemoryLimits(ctx, pod, containerName)
+	case "Fix command syntax":
+		err = e.fixCommandSyntax(ctx, pod, containerName)
+	case "Add liveness probe with initial delay":
+		err = e.addLivenessProbeDelay(ctx, pod, containerName)
+	default:
+		// For simple crashes, try adding a sleep before the command
+		err = e.addInitDelay(ctx, pod, containerName)
+	}
+
+	if err != nil {
+		result.Success = false
+		result.Message = fmt.Sprintf("Failed to apply fix: %v", err)
+		return result, err
+	}
+
+	color.Green("✅ Fix applied successfully!")
+	result.Success = true
+	result.Message = fmt.Sprintf("Applied fix strategy: %s", fixStrategy)
+
+	return result, nil
+}
+
+// analyzeCrashError finds the container and exit code causing the crash
+func (e *ExecutorClient) analyzeCrashError(pod *corev1.Pod) (containerName string, exitCode int32, err error) {
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		// Check if container is in CrashLoopBackOff
+		if containerStatus.State.Waiting != nil && 
+		   containerStatus.State.Waiting.Reason == "CrashLoopBackOff" {
+			// Check last termination state for exit code
+			if containerStatus.LastTerminationState.Terminated != nil {
+				return containerStatus.Name, 
+				       containerStatus.LastTerminationState.Terminated.ExitCode, 
+				       nil
+			}
+			// If no last termination state, return default
+			return containerStatus.Name, 1, nil
+		}
+		
+		// Also check if recently terminated
+		if containerStatus.State.Terminated != nil {
+			return containerStatus.Name, 
+			       containerStatus.State.Terminated.ExitCode, 
+			       nil
+		}
+	}
+	
+	return "", 0, fmt.Errorf("no crashing container found")
+}
+
+// determineCrashFix determines the best fix strategy based on exit code
+func (e *ExecutorClient) determineCrashFix(pod *corev1.Pod, containerName string, exitCode int32) string {
+	// Common exit codes and their fixes
+	switch exitCode {
+	case 0:
+		// Exit 0 but still crashing - might need init delay
+		return "Add init delay"
+	case 1:
+		// General errors - check if it's a simple command issue
+		for _, container := range pod.Spec.Containers {
+			if container.Name == containerName {
+				if len(container.Command) > 0 && container.Command[0] == "sh" {
+					return "Fix command syntax"
+				}
+			}
+		}
+		return "Add init delay"
+	case 137:
+		// SIGKILL - often OOM
+		return "Increase memory limits"
+	case 139:
+		// Segmentation fault
+		return "Add init delay"
+	case 143:
+		// SIGTERM - might need graceful shutdown handling
+		return "Add liveness probe with initial delay"
+	default:
+		return "Add init delay"
+	}
+}
+
+// addInitDelay adds a sleep before the main command
+func (e *ExecutorClient) addInitDelay(ctx context.Context, pod *corev1.Pod, containerName string) error {
+	color.Yellow("🔄 Adding initialization delay to container...")
+	
+	newPod := pod.DeepCopy()
+	newPod.ResourceVersion = ""
+	newPod.UID = ""
+	
+	// Find and modify the container
+	for i, container := range newPod.Spec.Containers {
+		if container.Name == containerName {
+			// Wrap existing command with sleep
+			if len(container.Command) > 0 {
+				// Preserve original command and add sleep
+				originalCmd := append([]string{}, container.Command...)
+				originalArgs := append([]string{}, container.Args...)
+				
+				newPod.Spec.Containers[i].Command = []string{"sh", "-c"}
+				cmdString := fmt.Sprintf("sleep 10 && %s", strings.Join(append(originalCmd, originalArgs...), " "))
+				newPod.Spec.Containers[i].Args = []string{cmdString}
+			} else {
+				// If no command, just add sleep
+				newPod.Spec.Containers[i].Command = []string{"sh", "-c", "sleep 10 && echo 'Container started'"}
+			}
+			break
+		}
+	}
+	
+	return e.recreatePod(ctx, pod, newPod)
+}
+
+// increaseMemoryLimits doubles the memory limits
+func (e *ExecutorClient) increaseMemoryLimits(ctx context.Context, pod *corev1.Pod, containerName string) error {
+	color.Yellow("🔄 Increasing memory limits...")
+	
+	newPod := pod.DeepCopy()
+	newPod.ResourceVersion = ""
+	newPod.UID = ""
+	
+	// Find and modify the container
+	for i, container := range newPod.Spec.Containers {
+		if container.Name == containerName {
+			if newPod.Spec.Containers[i].Resources.Limits == nil {
+				newPod.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
+			}
+			if newPod.Spec.Containers[i].Resources.Requests == nil {
+				newPod.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
+			}
+			
+			// Set or increase memory limits
+			newPod.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory] = resource.MustParse("256Mi")
+			newPod.Spec.Containers[i].Resources.Requests[corev1.ResourceMemory] = resource.MustParse("128Mi")
+			break
+		}
+	}
+	
+	return e.recreatePod(ctx, pod, newPod)
+}
+
+// fixCommandSyntax fixes common command syntax issues
+func (e *ExecutorClient) fixCommandSyntax(ctx context.Context, pod *corev1.Pod, containerName string) error {
+	color.Yellow("🔄 Fixing command syntax...")
+	
+	newPod := pod.DeepCopy()
+	newPod.ResourceVersion = ""
+	newPod.UID = ""
+	
+	// Find and modify the container
+	for i, container := range newPod.Spec.Containers {
+		if container.Name == containerName {
+			// Fix common command issues
+			if len(container.Command) > 0 && container.Command[0] == "sh" {
+				// Ensure proper shell command format
+				newPod.Spec.Containers[i].Command = []string{"sh", "-c"}
+				if len(container.Args) > 0 {
+					// Join args into single command
+					newPod.Spec.Containers[i].Args = []string{strings.Join(container.Args, " ")}
+				} else {
+					// Add a simple echo command
+					newPod.Spec.Containers[i].Args = []string{"echo 'Container running' && sleep 3600"}
+				}
+			}
+			break
+		}
+	}
+	
+	return e.recreatePod(ctx, pod, newPod)
+}
+
+// addLivenessProbeDelay adds or modifies liveness probe with initial delay
+func (e *ExecutorClient) addLivenessProbeDelay(ctx context.Context, pod *corev1.Pod, containerName string) error {
+	color.Yellow("🔄 Adding liveness probe delay...")
+	
+	newPod := pod.DeepCopy()
+	newPod.ResourceVersion = ""
+	newPod.UID = ""
+	
+	// Find and modify the container
+	for i, container := range newPod.Spec.Containers {
+		if container.Name == containerName {
+			// Add or modify liveness probe
+			if newPod.Spec.Containers[i].LivenessProbe == nil {
+				newPod.Spec.Containers[i].LivenessProbe = &corev1.Probe{}
+			}
+			
+			// Set initial delay to give container time to start
+			newPod.Spec.Containers[i].LivenessProbe.InitialDelaySeconds = 30
+			newPod.Spec.Containers[i].LivenessProbe.PeriodSeconds = 10
+			
+			// Add simple exec probe if none exists
+			if newPod.Spec.Containers[i].LivenessProbe.Exec == nil &&
+			   newPod.Spec.Containers[i].LivenessProbe.HTTPGet == nil &&
+			   newPod.Spec.Containers[i].LivenessProbe.TCPSocket == nil {
+				newPod.Spec.Containers[i].LivenessProbe.Exec = &corev1.ExecAction{
+					Command: []string{"echo", "alive"},
+				}
+			}
+			break
+		}
+	}
+	
+	return e.recreatePod(ctx, pod, newPod)
+}
+
+// recreatePod deletes old pod and creates new one
+func (e *ExecutorClient) recreatePod(ctx context.Context, oldPod, newPod *corev1.Pod) error {
+	// Delete the old pod
+	color.Yellow("🗑️  Deleting old pod...")
+	deletePolicy := metav1.DeletePropagationForeground
+	err := e.clientset.CoreV1().Pods(oldPod.Namespace).Delete(ctx, oldPod.Name, metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete old pod: %w", err)
+	}
+
+	// Wait a moment for deletion
+	time.Sleep(2 * time.Second)
+
+	// Create the new pod
+	color.Yellow("🚀 Creating new pod with fix...")
+	_, err = e.clientset.CoreV1().Pods(oldPod.Namespace).Create(ctx, newPod, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to create new pod: %w", err)
+	}
+
+	color.Green("✅ Pod recreated with fix!")
 	return nil
 }
 

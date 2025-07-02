@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/fatih/color"
@@ -10,13 +12,17 @@ import (
 	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/k8s"
 	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/analyzer"
 	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/executor"
+	"github.com/mmsuerkan/k8s-ai-agent-mvp/pkg/detector"
 )
 
 var (
-	podName   string
-	namespace string
-	dryRun    bool
-	autoFix   bool
+	podName       string
+	namespace     string
+	dryRun        bool
+	autoFix       bool
+	allNamespaces bool
+	analyzeOnly   bool
+	maxConcurrent int
 )
 
 var rootCmd = &cobra.Command{
@@ -171,8 +177,74 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		color.Cyan("k8s-ai-agent MVP v0.1.0")
+		color.Cyan("k8s-ai-agent MVP v0.2.0")
 		color.White("Built with Go " + "1.24.4")
+		color.White("Features: Watch Mode, Auto-Detection, Concurrent Fixing")
+	},
+}
+
+var watchCmd = &cobra.Command{
+	Use:   "watch",
+	Short: "Continuously watch and fix pod errors",
+	Long: `Continuously monitor Kubernetes pods for errors and optionally fix them automatically.
+
+Examples:
+  k8s-ai-agent watch --namespace=default                    # Watch specific namespace
+  k8s-ai-agent watch --all-namespaces                      # Watch all namespaces
+  k8s-ai-agent watch --namespace=default --auto-fix        # Watch and auto-fix
+  k8s-ai-agent watch --analyze-only                        # Only analyze, no fixes
+  k8s-ai-agent watch --auto-fix --max-concurrent=5         # Limit concurrent fixes`,
+	Run: func(cmd *cobra.Command, args []string) {
+		color.Green("🚀 Starting Kubernetes AI Auto-Fix Agent in Watch Mode")
+		
+		// Create watcher configuration
+		config := detector.WatcherConfig{
+			Namespace:     namespace,
+			AllNamespaces: allNamespaces,
+			AutoFix:       autoFix,
+			AnalyzeOnly:   analyzeOnly,
+			MaxConcurrent: maxConcurrent,
+		}
+
+		// Validate flags
+		if allNamespaces && namespace != "default" {
+			color.Red("❌ Cannot specify both --all-namespaces and --namespace")
+			os.Exit(1)
+		}
+
+		if autoFix && analyzeOnly {
+			color.Red("❌ Cannot specify both --auto-fix and --analyze-only")
+			os.Exit(1)
+		}
+
+		// Create pod watcher
+		watcher, err := detector.NewPodWatcher(config)
+		if err != nil {
+			color.Red("❌ Failed to create pod watcher: %v", err)
+			os.Exit(1)
+		}
+
+		// Create context with cancellation
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Setup signal handling for graceful shutdown
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+		go func() {
+			<-sigChan
+			color.Yellow("\n⚠️  Received shutdown signal...")
+			cancel()
+		}()
+
+		// Start watching
+		if err := watcher.Start(ctx); err != nil {
+			color.Red("❌ Watcher error: %v", err)
+			os.Exit(1)
+		}
+
+		color.Green("✅ Watch mode stopped gracefully")
 	},
 }
 
@@ -184,9 +256,17 @@ func init() {
 	fixCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be fixed without applying changes")
 	fixCmd.MarkFlagRequired("pod")
 	
+	// Add flags to watch command
+	watchCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Namespace to watch")
+	watchCmd.Flags().BoolVar(&allNamespaces, "all-namespaces", false, "Watch all namespaces")
+	watchCmd.Flags().BoolVar(&autoFix, "auto-fix", false, "Automatically apply fixes")
+	watchCmd.Flags().BoolVar(&analyzeOnly, "analyze-only", false, "Only analyze errors, don't fix")
+	watchCmd.Flags().IntVar(&maxConcurrent, "max-concurrent", 3, "Maximum concurrent fix operations")
+	
 	// Add commands to root
 	rootCmd.AddCommand(fixCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(watchCmd)
 }
 
 func main() {
