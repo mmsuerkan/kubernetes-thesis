@@ -1,8 +1,8 @@
 # K8s AI Auto-Fix Agent - Kubernetes Otomatik Hata Çözüm Sistemi
 
 > **🎯 Tez Projesi**: Kubernetes AI-Powered Error Detection and Resolution  
-> **🏫 Üniversite**: Marmara Üniversitesi  
-> **👨‍🎓 Öğrenci**: Mehmet Mert Sürücü  
+> **🏫 Üniversite**: TED Üniversitesi  
+> **👨‍🎓 Öğrenci**: Mustafa Mert Sürkan  
 > **📅 Tarih**: 2025  
 
 ## 🚀 Proje Özeti
@@ -334,9 +334,9 @@ Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICE
 
 ## 📞 İletişim
 
-**Mehmet Mert Sürücü**  
+**Mustafa Mert Sürkan**  
 - GitHub: [@mmsuerkan](https://github.com/mmsuerkan)
-- Email: mehmetmertsurucu@marun.edu.tr
+- Email: mustafamertsurkan@stu.tedu.edu.tr
 
 ---
 
