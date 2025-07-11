@@ -154,6 +154,11 @@ def karar_ver(hata_tipi):
 3. **Minimum 8GB RAM**: AI modelleri için
 4. **İnternet Bağlantısı**: OpenAI API için
 
+### 📋 Sistem Bileşenleri
+Bu sistem 2 ana servisten oluşur:
+- **Python AI Servisi**: `python -m uvicorn main:app --port 8000` ile başlatılır
+- **Go İzleme Servisi**: `k8s-real-integration.exe` ile başlatılır
+
 ### Adım 1: Yazılımları Kur
 
 ```bash
@@ -206,10 +211,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 4. Go servisini derle
-cd k8s-real-integration-go
 go mod download
-go build -o k8s-watcher.exe .
-cd ..
+go build -o k8s-real-integration.exe .
 
 # 5. Veritabanını oluştur
 python -c "from src.memory.strategy_db import StrategyDatabase; StrategyDatabase()"
@@ -231,13 +234,12 @@ export OPENAI_API_KEY=sk-your-api-key-here
 
 ```bash
 # Terminal 1: Python AI servisini başlat
-python main.py
+python -m uvicorn main:app --port 8000 --log-level info
 
 # Terminal 2: Go izleme servisini başlat  
-cd k8s-real-integration-go
-./k8s-watcher.exe
+k8s-real-integration.exe
 
-# Terminal 3: Hatalı pod oluştur
+# Terminal 3: Hatalı pod oluştur (yeni terminal)
 kubectl run test-nginx --image=nginx:bu-tag-yok
 
 # Beklenen Sonuç:
@@ -255,7 +257,11 @@ kubectl get pods
 ### Senaryo 2: Çöken Uygulama
 
 ```bash
-# Sürekli çöken bir pod oluştur
+# Önce servislerin çalıştığından emin ol:
+# Terminal 1: python -m uvicorn main:app --port 8000 --log-level info
+# Terminal 2: k8s-real-integration.exe
+
+# Terminal 3: Sürekli çöken bir pod oluştur
 kubectl run crash-app --image=busybox -- sh -c "echo 'Başladım'; sleep 5; exit 1"
 
 # Sistem Tepkisi:
@@ -267,7 +273,11 @@ kubectl run crash-app --image=busybox -- sh -c "echo 'Başladım'; sleep 5; exit
 ### Senaryo 3: Bellek Yetersizliği
 
 ```bash
-# Düşük bellek limiti ile pod oluştur
+# Önce servislerin çalıştığından emin ol:
+# Terminal 1: python -m uvicorn main:app --port 8000 --log-level info
+# Terminal 2: k8s-real-integration.exe
+
+# Terminal 3: Düşük bellek limiti ile pod oluştur
 kubectl run memory-app --image=stress -- --vm 1 --vm-bytes 500M
 kubectl set resources pod memory-app --limits=memory=10Mi
 

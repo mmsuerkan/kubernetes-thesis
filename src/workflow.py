@@ -214,6 +214,28 @@ class ReflexiveK8sWorkflow:
         # Find relevant strategies from learned knowledge (both persistent and in-memory)
         relevant_strategies = self._find_relevant_strategies(error_type, state, strategy_database)
         
+        # NEW: Retrieve lessons learned from similar episodes
+        similar_episodes = self.episodic_memory.get_similar_episodes(
+            error_type=error_type,
+            context=state.get("pod_name", ""),
+            limit=5
+        )
+        
+        lessons_learned = []
+        for episode in similar_episodes:
+            lessons_learned.extend(episode.lessons_learned)
+        
+        if lessons_learned:
+            logger.info(f"📚 LESSONS LEARNED: Found {len(lessons_learned)} lessons from {len(similar_episodes)} similar episodes")
+            for i, lesson in enumerate(lessons_learned[:3]):  # Top 3 lessons
+                logger.info(f"  💡 Lesson {i+1}: {lesson[:100]}...")
+            
+            # Add lessons to state for strategy modification
+            state["lessons_learned"] = lessons_learned
+        else:
+            logger.info("📚 LESSONS LEARNED: No similar episodes found")
+            state["lessons_learned"] = []
+        
         # Always try to use persistent strategies first
         persistent_strategies = self.strategy_db.get_strategies_for_error(error_type)
         

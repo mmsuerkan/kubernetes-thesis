@@ -145,18 +145,28 @@ func (c *Client) GetPodLogs(namespace, podName string) ([]string, error) {
 	return logLines, nil
 }
 
-// IsPodFailed checks if a pod has failed
+// IsPodFailed checks if a pod has failed or is in problematic state
 func (c *Client) IsPodFailed(pod *v1.Pod) bool {
 	// Check pod phase
 	if pod.Status.Phase == v1.PodFailed {
 		return true
 	}
 
+	// Check if pod is stuck in Pending state (usually indicates problems)
+	if pod.Status.Phase == v1.PodPending {
+		// If pod has been pending for more than 60 seconds, consider it problematic
+		if time.Since(pod.CreationTimestamp.Time) > 60*time.Second {
+			return true
+		}
+	}
+
 	// Check container states
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Waiting != nil {
 			reason := containerStatus.State.Waiting.Reason
-			if reason == "ImagePullBackOff" || reason == "ErrImagePull" || reason == "CrashLoopBackOff" {
+			if reason == "ImagePullBackOff" || reason == "ErrImagePull" || reason == "CrashLoopBackOff" ||
+			   reason == "InvalidImageName" || reason == "CreateContainerConfigError" ||
+			   reason == "CreateContainerError" || reason == "ConfigError" {
 				return true
 			}
 		}
@@ -167,11 +177,51 @@ func (c *Client) IsPodFailed(pod *v1.Pod) bool {
 		}
 	}
 
+	// Check init container states
+	for _, initContainerStatus := range pod.Status.InitContainerStatuses {
+		if initContainerStatus.State.Waiting != nil {
+			reason := initContainerStatus.State.Waiting.Reason
+			if reason == "ImagePullBackOff" || reason == "ErrImagePull" || reason == "InvalidImageName" {
+				return true
+			}
+		}
+		if initContainerStatus.State.Terminated != nil {
+			if initContainerStatus.State.Terminated.ExitCode != 0 {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
 // GetPodErrorType determines the type of error for a failed pod
 func (c *Client) GetPodErrorType(pod *v1.Pod) string {
+	// Check if pod is stuck in Pending state
+	if pod.Status.Phase == v1.PodPending {
+		if time.Since(pod.CreationTimestamp.Time) > 60*time.Second {
+			return "PodPending"
+		}
+	}
+
+	// Check init container states first
+	for _, initContainerStatus := range pod.Status.InitContainerStatuses {
+		if initContainerStatus.State.Waiting != nil {
+			reason := initContainerStatus.State.Waiting.Reason
+			switch reason {
+			case "ImagePullBackOff", "ErrImagePull":
+				return "InitContainerImagePullBackOff"
+			case "InvalidImageName":
+				return "InitContainerInvalidImageName"
+			}
+		}
+		if initContainerStatus.State.Terminated != nil {
+			if initContainerStatus.State.Terminated.ExitCode != 0 {
+				return "InitContainerFailed"
+			}
+		}
+	}
+
 	// Check container states for specific errors
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.State.Waiting != nil {
@@ -185,11 +235,27 @@ func (c *Client) GetPodErrorType(pod *v1.Pod) string {
 				return "InvalidImageName"
 			case "CreateContainerConfigError":
 				return "CreateContainerConfigError"
+			case "CreateContainerError":
+				return "CreateContainerError"
+			case "ConfigError":
+				return "ConfigError"
 			}
 		}
 		if containerStatus.State.Terminated != nil {
-			if containerStatus.State.Terminated.ExitCode != 0 {
+			exitCode := containerStatus.State.Terminated.ExitCode
+			switch exitCode {
+			case 1:
 				return "CrashLoopBackOff"
+			case 137:
+				return "OOMKilled"
+			case 139:
+				return "Segfault"
+			case 143:
+				return "SIGTERM"
+			default:
+				if exitCode != 0 {
+					return "CrashLoopBackOff"
+				}
 			}
 		}
 	}

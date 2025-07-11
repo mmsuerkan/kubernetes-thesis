@@ -155,7 +155,8 @@ class EpisodicMemoryManager:
                     # Calculate similarity score
                     similarity = self._calculate_context_similarity(context, episode_context)
                     
-                    if similarity > 0.3:  # Threshold for similarity
+                    # Lower threshold for better matching + always include same error type
+                    if similarity > 0.1 or True:  # Accept all same error_type episodes for now
                         episode = EpisodicMemory(
                             id=row[0],
                             pod_name=row[1],
