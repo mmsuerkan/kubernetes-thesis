@@ -1,6 +1,0 @@
-{
-  "pod_name": "test-pod-1",
-  "namespace": "default", 
-  "error_type": "ImagePullBackOff",
-  "thread_id": "test-thread-1"
-}
