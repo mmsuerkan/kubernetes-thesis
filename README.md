@@ -336,7 +336,7 @@ Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICE
 
 **Mustafa Mert Sürkan**  
 - GitHub: [@mmsuerkan](https://github.com/mmsuerkan)
-- Email: mustafamertsurkan@stu.tedu.edu.tr
+- Email: mmert.suerkan@tedu.edu.tr
 
 ---
 
