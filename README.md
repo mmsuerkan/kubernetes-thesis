@@ -1,6 +1,8 @@
-# Kubernetes AI Auto-Fix Agent MVP
+# K8s Real Integration Service
 
-> **Complete AI-powered error detection and automated resolution system for Kubernetes**
+> **Bridge between k8s-ai-agent-mvp (Go) and k8s-reflexion-service (Python) for real Kubernetes integration**
+
+This project extends the k8s-reflexion-service to support real Kubernetes data from the Go-based k8s-ai-agent-mvp service.
 
 ## 🚀 Quick Start Guide
 

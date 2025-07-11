@@ -74,6 +74,21 @@ class PodErrorRequest(BaseModel):
     error_type: str = Field(..., description="Type of error (e.g., ImagePullBackOff)")
     thread_id: Optional[str] = Field(None, description="Thread ID for workflow state persistence")
 
+# NEW: Real K8s data from Go service
+class RealK8sData(BaseModel):
+    pod_spec: Dict[str, Any] = Field(..., description="Full pod specification")
+    events: list[Dict[str, Any]] = Field(..., description="Pod events")
+    logs: list[str] = Field(..., description="Pod logs")
+    container_statuses: Optional[list[Dict[str, Any]]] = Field(None, description="Container statuses")
+
+class GoServiceErrorRequest(BaseModel):
+    """Request from Go k8s-ai-agent-mvp service with real K8s data"""
+    pod_name: str = Field(..., description="Name of the failing pod")
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+    error_type: str = Field(..., description="Type of error (e.g., ImagePullBackOff)")
+    real_k8s_data: RealK8sData = Field(..., description="Real Kubernetes data from Go service")
+    thread_id: Optional[str] = Field(None, description="Thread ID for workflow state persistence")
+
 class ReflexionResponse(BaseModel):
     workflow_id: str
     success: bool
@@ -190,6 +205,101 @@ async def process_pod_error(request: PodErrorRequest):
         
     except Exception as e:
         logger.error("Workflow processing failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Workflow failed: {str(e)}")
+
+# NEW: Endpoint for Go service with real K8s data
+@app.post("/api/v1/reflexion/process-with-k8s-data", response_model=ReflexionResponse)
+async def process_pod_error_with_real_data(request: GoServiceErrorRequest):
+    """
+    Process a pod error with real K8s data from Go service
+    
+    This endpoint receives real Kubernetes data from k8s-ai-agent-mvp
+    and processes it through the reflexive workflow with enhanced context.
+    """
+    if not workflow_instance:
+        raise HTTPException(status_code=503, detail="Workflow not initialized")
+    
+    logger.info("Processing pod error with real K8s data", 
+                pod_name=request.pod_name, 
+                error_type=request.error_type,
+                has_real_data=True)
+    
+    try:
+        # Create enhanced initial state with real K8s data
+        from src.state import ReflexiveK8sState
+        
+        initial_state: ReflexiveK8sState = {
+            "pod_name": request.pod_name,
+            "namespace": request.namespace,
+            "error_type": request.error_type,
+            "retry_count": 0,
+            "success": False,
+            "workflow_id": f"go_integration_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            # Real K8s data from Go service
+            "k8sgpt_analysis": {
+                "confidence": 0.95,  # High confidence with real data
+                "analysis": f"Real K8s data analysis for {request.error_type}",
+                "real_data": True,
+                "pod_spec": request.real_k8s_data.pod_spec,
+                "events": request.real_k8s_data.events,
+                "logs": request.real_k8s_data.logs
+            },
+            "real_k8s_data": {
+                "pod": request.real_k8s_data.pod_spec,
+                "events": request.real_k8s_data.events,
+                "logs": request.real_k8s_data.logs,
+                "container_statuses": request.real_k8s_data.container_statuses
+            },
+            # Standard fields
+            "current_strategy": {},
+            "execution_result": {},
+            "detailed_observation": {},
+            "observation_timestamp": datetime.now(),
+            "current_reflection": None,
+            "reflection_history": [],
+            "reflection_depth": 0,
+            "episodic_memory": [],
+            "past_attempts": [],
+            "strategy_database": {},
+            "strategy_evolution": [],
+            "meta_learning": {},
+            "self_awareness_level": 0.5,
+            "learning_velocity": 0.0,
+            "environment_context": {},
+            "temporal_context": {},
+            "performance_metrics": {},
+            "improvement_trajectory": [],
+            "execution_start_time": datetime.now()
+        }
+        
+        # Process through reflexive workflow
+        result = await workflow_instance.compiled_workflow.ainvoke(initial_state)
+        
+        # Prepare response
+        response = {
+            "workflow_id": result.get("workflow_id"),
+            "success": result.get("success", False),
+            "pod_name": request.pod_name,
+            "final_strategy": result.get("current_strategy", {}),
+            "resolution_time": result.get("resolution_time", 0),
+            "requires_human_intervention": result.get("requires_human_intervention", False),
+            "reflexion_summary": {
+                "reflections_performed": len(result.get("reflection_history", [])),
+                "strategies_learned": len(result.get("strategy_database", {})),
+                "self_awareness_level": result.get("self_awareness_level", 0.0),
+                "learning_velocity": result.get("learning_velocity", 0.0),
+                "used_real_k8s_data": True
+            }
+        }
+        
+        logger.info("Successfully processed with real K8s data",
+                   workflow_id=response["workflow_id"],
+                   strategy_type=response["final_strategy"].get("type"))
+        
+        return ReflexionResponse(**response)
+        
+    except Exception as e:
+        logger.error("Workflow processing with real data failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Workflow failed: {str(e)}")
 
 @app.post("/api/v1/reflexion/process-async")

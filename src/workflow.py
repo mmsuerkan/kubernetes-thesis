@@ -137,13 +137,38 @@ class ReflexiveK8sWorkflow:
         logger.info("Starting reflexive error analysis", pod_name=state["pod_name"])
         
         try:
-            # Use mock analysis since we're running standalone
-            state["k8sgpt_analysis"] = {
-                "confidence": 0.9,
-                "analysis": f"Mock analysis for {state['error_type']} error",
-                "recommendations": ["Check image repository", "Verify network connectivity"],
-                "error_details": f"Pod {state['pod_name']} experiencing {state['error_type']}"
-            }
+            # Check if we have real K8s data from Go service
+            if state.get("real_k8s_data") and state.get("k8sgpt_analysis", {}).get("real_data"):
+                # Use real K8s data for enhanced analysis
+                logger.info("Using real K8s data for analysis", pod_name=state["pod_name"])
+                
+                # Enhance existing analysis with real data insights
+                real_data = state["real_k8s_data"]
+                events = real_data.get("events", [])
+                logs = real_data.get("logs", [])
+                
+                # Extract insights from events
+                event_insights = self._analyze_k8s_events(events)
+                
+                # Extract insights from logs
+                log_insights = self._analyze_pod_logs(logs)
+                
+                # Enhance the k8sgpt_analysis with real data
+                state["k8sgpt_analysis"].update({
+                    "event_insights": event_insights,
+                    "log_insights": log_insights,
+                    "enhanced_with_real_data": True,
+                    "confidence": min(0.98, state["k8sgpt_analysis"].get("confidence", 0.9) + 0.05)  # Boost confidence
+                })
+                
+            else:
+                # Fallback to mock analysis
+                state["k8sgpt_analysis"] = {
+                    "confidence": 0.9,
+                    "analysis": f"Mock analysis for {state['error_type']} error",
+                    "recommendations": ["Check image repository", "Verify network connectivity"],
+                    "error_details": f"Pod {state['pod_name']} experiencing {state['error_type']}"
+                }
         
         except Exception as e:
             logger.error("Error analysis failed", error=str(e))
@@ -681,3 +706,66 @@ class ReflexiveK8sWorkflow:
                 "error": str(e),
                 "requires_human_intervention": True
             }
+    
+    # === Helper Methods for Real K8s Data Analysis ===
+    
+    def _analyze_k8s_events(self, events: list[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze Kubernetes events for insights"""
+        insights = {
+            "error_patterns": [],
+            "recent_events": [],
+            "critical_events": []
+        }
+        
+        for event in events[-10:]:  # Last 10 events
+            event_msg = event.get("message", "").lower()
+            event_type = event.get("type", "")
+            
+            # Pattern detection
+            if "pull" in event_msg and ("denied" in event_msg or "failed" in event_msg):
+                insights["error_patterns"].append("image_pull_authentication")
+            elif "crashloopbackoff" in event_msg:
+                insights["error_patterns"].append("crash_loop")
+            elif "oomkilled" in event_msg:
+                insights["error_patterns"].append("out_of_memory")
+            
+            # Critical events
+            if event_type == "Warning":
+                insights["critical_events"].append({
+                    "reason": event.get("reason", ""),
+                    "message": event.get("message", "")[:200]
+                })
+        
+        return insights
+    
+    def _analyze_pod_logs(self, logs: list[str]) -> Dict[str, Any]:
+        """Analyze pod logs for insights"""
+        insights = {
+            "error_types": [],
+            "exit_codes": [],
+            "stack_traces": False
+        }
+        
+        for log in logs[-50:]:  # Last 50 log lines
+            log_lower = log.lower()
+            
+            # Error type detection
+            if "error" in log_lower:
+                insights["error_types"].append("general_error")
+            elif "exception" in log_lower:
+                insights["error_types"].append("exception")
+            elif "panic" in log_lower:
+                insights["error_types"].append("panic")
+            
+            # Exit code detection
+            if "exit code" in log_lower:
+                import re
+                match = re.search(r'exit code[:\s]+(\d+)', log_lower)
+                if match:
+                    insights["exit_codes"].append(int(match.group(1)))
+            
+            # Stack trace detection
+            if "traceback" in log_lower or "stack trace" in log_lower:
+                insights["stack_traces"] = True
+        
+        return insights
