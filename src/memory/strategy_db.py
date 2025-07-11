@@ -25,6 +25,7 @@ class Strategy:
     updated_at: datetime
     source: str  # 'learned', 'manual', 'community'
     context: Dict[str, Any]
+    last_used: Optional[datetime] = None
 
 class StrategyDatabase:
     """SQLite-based strategy database for persistent learning"""
@@ -54,6 +55,14 @@ class StrategyDatabase:
                     context TEXT DEFAULT '{}'  -- JSON object
                 )
             """)
+            
+            # Add last_used column if it doesn't exist
+            try:
+                cursor.execute("ALTER TABLE strategies ADD COLUMN last_used TIMESTAMP NULL")
+                logger.info("Added last_used column to strategies table")
+            except sqlite3.OperationalError:
+                # Column already exists
+                pass
             
             # Strategy usage history
             cursor.execute("""
@@ -154,7 +163,8 @@ class StrategyDatabase:
                         created_at=datetime.fromisoformat(row[7]),
                         updated_at=datetime.fromisoformat(row[8]),
                         source=row[9],
-                        context=json.loads(row[10])
+                        context=json.loads(row[10]),
+                        last_used=datetime.fromisoformat(row[11]) if len(row) > 11 and row[11] else None
                     )
                     
                     # Check if strategy conditions match current context
@@ -183,17 +193,38 @@ class StrategyDatabase:
                 """, (strategy_id, pod_name, namespace, success, execution_time, feedback))
                 
                 # Update strategy statistics
-                cursor.execute("""
-                    UPDATE strategies 
-                    SET usage_count = usage_count + 1,
-                        success_rate = (
-                            SELECT AVG(CAST(success AS FLOAT)) 
-                            FROM strategy_usage 
-                            WHERE strategy_id = ?
-                        ),
-                        updated_at = ?
-                    WHERE id = ?
-                """, (strategy_id, datetime.now().isoformat(), strategy_id))
+                now = datetime.now()
+                
+                # Check if last_used column exists
+                cursor.execute("PRAGMA table_info(strategies)")
+                columns = [col[1] for col in cursor.fetchall()]
+                has_last_used = 'last_used' in columns
+                
+                if has_last_used:
+                    cursor.execute("""
+                        UPDATE strategies 
+                        SET usage_count = usage_count + 1,
+                            success_rate = (
+                                SELECT AVG(CAST(success AS FLOAT)) 
+                                FROM strategy_usage 
+                                WHERE strategy_id = ?
+                            ),
+                            updated_at = ?,
+                            last_used = ?
+                        WHERE id = ?
+                    """, (strategy_id, now.isoformat(), now.isoformat(), strategy_id))
+                else:
+                    cursor.execute("""
+                        UPDATE strategies 
+                        SET usage_count = usage_count + 1,
+                            success_rate = (
+                                SELECT AVG(CAST(success AS FLOAT)) 
+                                FROM strategy_usage 
+                                WHERE strategy_id = ?
+                            ),
+                            updated_at = ?
+                        WHERE id = ?
+                    """, (strategy_id, now.isoformat(), strategy_id))
                 
                 # Update confidence based on recent performance
                 cursor.execute("""

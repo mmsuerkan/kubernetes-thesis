@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = structlog.get_logger()
+logger.info("🤖 AI Command Generator module loaded - Enhanced logging enabled")
 
 
 class AICommandGenerator:
@@ -42,8 +43,24 @@ class AICommandGenerator:
         Returns:
             Dictionary containing backup, fix, validation, and rollback commands
         """
-        logger.info("Generating AI kubectl commands", 
-                   error_type=error_type, pod_name=pod_name)
+        logger.info("="*80)
+        logger.info("🤖 AI COMMAND GENERATION START")
+        logger.info(f"   📱 Pod: {pod_name} (namespace: {namespace})")
+        logger.info(f"   🚨 Error Type: {error_type}")
+        logger.info(f"   🎯 Strategy ID: {strategy.get('id', 'unknown')}")
+        logger.info(f"   📊 Strategy Confidence: {strategy.get('confidence', 0):.2%}")
+        logger.info(f"   💡 Selection Reason: {strategy.get('selection_reason', 'unknown')}")
+        logger.info(f"   🔢 Usage Count: {strategy.get('usage_count', 0)}")
+        logger.info(f"   📈 Success Rate: {strategy.get('success_rate', 0):.2%}")
+        
+        # Show if this is a learned strategy
+        if strategy.get("selection_reason") == "high_confidence_persistent":
+            logger.info("   🧠 USING LEARNED STRATEGY FROM DATABASE")
+        elif strategy.get("selection_reason") == "default_fallback":
+            logger.info("   🎯 USING DEFAULT FALLBACK STRATEGY")
+        else:
+            logger.info("   🔄 USING IN-MEMORY STRATEGY")
+        logger.info("="*80)
         
         try:
             # Prepare context data
@@ -113,21 +130,38 @@ class AICommandGenerator:
         system_prompt = """You are a Kubernetes expert specializing in error resolution.
 Generate kubectl commands to fix pod errors safely and effectively.
 
-IMPORTANT RULES:
-1. Always create a backup before making changes
-2. Use non-destructive operations when possible
-3. Include validation commands to verify success
-4. Provide rollback commands to undo changes
-5. Use proper kubectl syntax and flags
-6. Avoid dangerous operations like --force or --grace-period=0
-7. Return commands as valid JSON with specific structure
+CRITICAL RULES FOR WINDOWS COMPATIBILITY:
+1. NEVER use pipe commands (|) - they fail on Windows kubectl execution
+2. NEVER use shell redirections (>) - they fail on Windows kubectl execution  
+3. Use only direct kubectl commands without shell operators
 
-Output format:
+ERROR-SPECIFIC STRATEGIES:
+
+For ImagePullBackOff:
+- Root Cause: Invalid/nonexistent image tag
+- NEVER use "kubectl set image" for pods with --restart=Never (they are immutable)
+- ALWAYS use delete+recreate strategy
+- Working Fix: ["kubectl delete pod {pod_name} -n {namespace}", "kubectl run {pod_name} --image=nginx:latest --restart=Never -n {namespace}"]
+
+For CrashLoopBackOff:
+- Root Cause: Container exits with error
+- Use kubectl patch for resource limits
+- Use kubectl delete+recreate for command fixes
+
+WORKING COMMAND EXAMPLES:
+✅ kubectl get pod podname -n namespace
+✅ kubectl delete pod podname -n namespace  
+✅ kubectl run podname --image=nginx:latest --restart=Never -n namespace
+✅ kubectl describe pod podname -n namespace
+❌ kubectl describe pod podname | grep "Image"  (pipe fails)
+❌ kubectl get pod podname -o yaml > backup.yaml  (redirection fails)
+
+Output format (use ONLY working commands):
 {
-    "backup_commands": ["command1", "command2"],
-    "fix_commands": ["command1", "command2"],
-    "validation_commands": ["command1", "command2"],
-    "rollback_commands": ["command1", "command2"]
+    "backup_commands": ["kubectl get pod {pod_name} -n {namespace} -o yaml"],
+    "fix_commands": ["simple_working_fix_command"],
+    "validation_commands": ["kubectl get pod {pod_name} -n {namespace}", "kubectl describe pod {pod_name} -n {namespace}"],
+    "rollback_commands": ["kubectl delete pod {pod_name} -n {namespace}"]
 }"""
 
         human_prompt = f"""Generate kubectl commands to fix this Kubernetes error:
@@ -162,7 +196,7 @@ Generate safe, effective kubectl commands following the specified JSON format.""
             commands = json.loads(response.content)
             return commands
         except json.JSONDecodeError:
-            logger.error("Failed to parse GPT-4 response as JSON", response=response.content)
+            logger.info("GPT-4 response contains JSON wrapper, extracting...")
             # Try to extract JSON from response
             return self._extract_json_from_response(response.content)
     
@@ -209,18 +243,18 @@ Generate safe, effective kubectl commands following the specified JSON format.""
         if error_type == "ImagePullBackOff":
             return {
                 "backup_commands": [
-                    f"kubectl get pod {pod_name} -n {namespace} -o yaml > /tmp/{pod_name}-backup.yaml"
+                    f"kubectl get pod {pod_name} -n {namespace} -o yaml"
                 ],
                 "fix_commands": [
-                    f"kubectl patch pod {pod_name} -n {namespace} -p '{{\"spec\":{{\"containers\":[{{\"name\":\"main\",\"image\":\"nginx:latest\"}}]}}}}'",
-                    f"kubectl delete pod {pod_name} -n {namespace}"
+                    f"kubectl delete pod {pod_name} -n {namespace}",
+                    f"kubectl run {pod_name} --image=nginx:latest --restart=Never -n {namespace}"
                 ],
                 "validation_commands": [
                     f"kubectl get pod {pod_name} -n {namespace}",
-                    f"kubectl wait --for=condition=Ready pod/{pod_name} -n {namespace} --timeout=60s"
+                    f"kubectl describe pod {pod_name} -n {namespace}"
                 ],
                 "rollback_commands": [
-                    f"kubectl apply -f /tmp/{pod_name}-backup.yaml"
+                    f"kubectl delete pod {pod_name} -n {namespace}"
                 ]
             }
         

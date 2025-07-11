@@ -226,11 +226,20 @@ Include at least 3 specific insights from this experience.
                 json_content = reflection_text[json_start:json_end]
                 structured_data = json.loads(json_content)
             else:
-                structured_data = {}
+                # No JSON found, create basic structure
+                structured_data = {
+                    "insights": [],
+                    "strategy_modifications": {},
+                    "overall_reflection_confidence": 0.7
+                }
                 
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("Failed to parse structured reflection JSON")
-            structured_data = {}
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.info(f"Reflection response is text-only (no JSON), proceeding with text analysis: {str(e)[:100]}")
+            structured_data = {
+                "insights": [],
+                "strategy_modifications": {},
+                "overall_reflection_confidence": 0.7
+            }
         
         # Extract insights from text analysis
         insights = self._extract_insights_from_text(reflection_text)

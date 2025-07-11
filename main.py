@@ -25,6 +25,9 @@ from src.memory.performance_tracker import PerformanceTracker
 from src.executor.ai_command_generator import AICommandGenerator
 
 # Configure logging
+import logging
+logging.basicConfig(level=logging.INFO)
+
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
@@ -828,7 +831,6 @@ async def get_episodes(error_type: str = None, limit: int = 10):
                     episodes = []
                     for row in cursor.fetchall():
                         from src.memory.episodic_memory import EpisodicMemory as PersistentEpisodicMemory
-                        from datetime import datetime
                         episode = PersistentEpisodicMemory(
                             id=row[0],
                             pod_name=row[1],
@@ -841,7 +843,7 @@ async def get_episodes(error_type: str = None, limit: int = 10):
                             confidence_before=row[8],
                             confidence_after=row[9],
                             resolution_time=row[10],
-                            timestamp=datetime.fromisoformat(row[11]),
+                            timestamp=datetime.fromisoformat(row[11]) if row[11] else datetime.now(),
                             reflection_quality=row[12],
                             insights_generated=row[13]
                         )
@@ -1039,10 +1041,16 @@ async def process_execution_feedback(request: ExecutionFeedbackRequest):
     if not workflow_instance:
         raise HTTPException(status_code=503, detail="Workflow not initialized")
     
-    logger.info("Processing execution feedback for reflexion learning", 
-                workflow_id=request.workflow_id,
-                pod_name=request.pod_name,
-                execution_status=request.execution_result.get("status"))
+    logger.info("="*80)
+    logger.info("🔄 EXECUTION FEEDBACK PROCESSING")
+    logger.info(f"   🆔 Workflow ID: {request.workflow_id}")
+    logger.info(f"   📱 Pod: {request.pod_name} (namespace: {request.namespace})")
+    logger.info(f"   🚨 Error Type: {request.error_type}")
+    logger.info(f"   🎯 Strategy Used: {request.strategy_used.get('id', 'unknown')}")
+    logger.info(f"   📊 Execution Status: {request.execution_result.get('status')}")
+    logger.info(f"   ✅ Success: {request.execution_result.get('success', False)}")
+    logger.info(f"   📋 Commands: {request.execution_result.get('success_count', 0)}/{request.execution_result.get('total_commands', 0)} successful")
+    logger.info("="*80)
     
     start_time = datetime.now()
     
@@ -1072,7 +1080,15 @@ async def process_execution_feedback(request: ExecutionFeedbackRequest):
                     feedback=f"Real execution: {success_count}/{total_commands} commands succeeded"
                 )
                 strategy_confidence_updated = True
-                logger.info("Strategy performance updated", strategy_id=strategy_id, success_rate=success_rate)
+                logger.info("="*80)
+                logger.info("📈 STRATEGY DATABASE PERFORMANCE UPDATE")
+                logger.info(f"   🎯 Strategy ID: {strategy_id}")
+                logger.info(f"   ✅ Execution Success: {execution_success}")
+                logger.info(f"   📈 Success Rate: {success_rate:.2%}")
+                logger.info(f"   📋 Commands Success: {success_count}/{total_commands}")
+                logger.info(f"   ⏱️  Execution Time: {execution_time:.2f}s")
+                logger.info(f"   🧠 Learning Update: APPLIED TO PERSISTENT DATABASE")
+                logger.info("="*80)
             except Exception as e:
                 logger.error("Failed to update strategy performance", error=str(e))
         
@@ -1093,13 +1109,41 @@ async def process_execution_feedback(request: ExecutionFeedbackRequest):
                     ]
                 }
                 
-                episodic_memory.store_episode(
-                    action_taken=request.strategy_used,
-                    outcome={"success": execution_success, "success_rate": success_rate},
-                    lessons_learned=episode_data["lessons_learned"]
+                from src.memory.episodic_memory import EpisodicMemory
+                
+                # Generate unique episode ID
+                import time
+                episode_id = f"execution_feedback_{request.workflow_id}_{int(time.time())}"
+                
+                episode = EpisodicMemory(
+                    id=episode_id,
+                    pod_name=request.pod_name,
+                    namespace=request.namespace,
+                    error_type=request.error_type,
+                    context={"workflow_id": request.workflow_id, "timestamp": request.timestamp},
+                    actions_taken=[request.strategy_used],  # List format
+                    outcome={"success": execution_success, "success_rate": success_rate, "status": request.execution_result.get("status")},
+                    lessons_learned=episode_data["lessons_learned"],
+                    confidence_before=request.strategy_used.get("confidence", 0.0),
+                    confidence_after=request.strategy_used.get("confidence", 0.0) * (success_rate if success_rate > 0 else 0.5),
+                    resolution_time=execution_time,
+                    timestamp=datetime.now(),
+                    reflection_quality=0.8,  # High quality for real execution feedback
+                    insights_generated=len(episode_data["lessons_learned"])
                 )
+                
+                episodic_memory.store_episode(episode)
                 reflexion_updated = True
-                logger.info("Episodic memory updated with real execution results")
+                logger.info("="*80)
+                logger.info("🧠 EPISODIC MEMORY UPDATE")
+                logger.info(f"   🆔 Episode ID: {episode.id}")
+                logger.info(f"   📱 Pod: {request.pod_name}")
+                logger.info(f"   🎯 Strategy: {strategy_id}")
+                logger.info(f"   ✅ Execution Success: {execution_success}")
+                logger.info(f"   📈 Success Rate: {success_rate:.2%}")
+                logger.info(f"   📚 Lessons Learned: {len(episode.lessons_learned)} insights")
+                logger.info(f"   🧠 Memory Update: STORED IN PERSISTENT DATABASE")
+                logger.info("="*80)
             except Exception as e:
                 logger.error("Failed to update episodic memory", error=str(e))
         

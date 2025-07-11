@@ -255,6 +255,16 @@ func (pw *PodWatcher) generateAndExecuteCommands(pod *v1.Pod, response *reflexio
 		// Continue anyway, don't fail the whole process
 	}
 	
+	// Step 4: If pod was successfully fixed, remove from processed list
+	// This allows re-processing if the same pod fails again
+	if executionResult.Status == "success" {
+		podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+		pw.mutex.Lock()
+		delete(pw.processedPods, podKey)
+		pw.mutex.Unlock()
+		log.Printf("✅ Pod %s successfully fixed, removed from processed list", podKey)
+	}
+	
 	return nil
 }
 

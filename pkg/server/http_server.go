@@ -105,11 +105,15 @@ func (s *HTTPServer) handleExecuteCommands(w http.ResponseWriter, r *http.Reques
 	log.Printf("🔧 Executing kubectl commands for pod: %s (error: %s, dry-run: %v)", 
 		req.PodName, req.ErrorType, req.DryRun)
 
-	// Flatten commands from map to slice
+	// Execute commands in correct order: backup -> fix -> validation (skip rollback)
 	var allCommands []string
-	for category, commands := range req.Commands {
-		log.Printf("📂 Category: %s - %d commands", category, len(commands))
-		allCommands = append(allCommands, commands...)
+	executionOrder := []string{"backup_commands", "fix_commands", "validation_commands"}
+	
+	for _, category := range executionOrder {
+		if commands, exists := req.Commands[category]; exists {
+			log.Printf("📂 Category: %s - %d commands", category, len(commands))
+			allCommands = append(allCommands, commands...)
+		}
 	}
 
 	// Execute commands with timeout

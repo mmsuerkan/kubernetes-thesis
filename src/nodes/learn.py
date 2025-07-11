@@ -825,7 +825,7 @@ class LearningEngine:
                 "resource_management": "CrashLoopBackOff",   # From resource analysis
                 "temporal_optimization": "CrashLoopBackOff",
                 "resource_optimization": "CrashLoopBackOff",
-                "insight_strategy": state.get("error_type", "ImagePullBackOff")  # Dynamic mapping
+                "insight_strategy": "ImagePullBackOff"  # Default mapping
             }
             
             # Legacy cleanup - map old types to new
@@ -852,7 +852,15 @@ class LearningEngine:
             success = self.strategy_db.add_strategy(strategy)
             
             if success:
-                logger.info(f"Added persistent strategy: {strategy.id}")
+                logger.info("="*80)
+                logger.info("🏦 STRATEGY DATABASE INSERTION")
+                logger.info(f"✅ Added persistent strategy: {strategy.id}")
+                logger.info(f"   📊 Error Type: {strategy.error_type}")
+                logger.info(f"   🎯 Confidence: {strategy.confidence:.2%}")
+                logger.info(f"   📋 Actions: {strategy.actions}")
+                logger.info(f"   🧠 Source: {strategy.source}")
+                logger.info(f"   📅 Created: {strategy.created_at.isoformat()}")
+                logger.info("="*80)
             else:
                 logger.warning(f"Failed to add persistent strategy: {strategy.id}")
                 

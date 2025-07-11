@@ -23,6 +23,7 @@ from .memory.episodic_memory import EpisodicMemoryManager, EpisodicMemory
 from .memory.performance_tracker import PerformanceTracker
 
 logger = structlog.get_logger()
+logger.info("🚀 Workflow module loaded - Enhanced logging enabled")
 
 
 class ReflexiveK8sWorkflow:
@@ -205,7 +206,7 @@ class ReflexiveK8sWorkflow:
     
     async def _intelligent_strategy_selection_node(self, state: ReflexiveK8sState) -> ReflexiveK8sState:
         """Intelligent strategy selection based on learned knowledge"""
-        logger.info("Performing intelligent strategy selection", pod_name=state["pod_name"])
+        logger.info("🧠 STRATEGY SELECTION START", pod_name=state["pod_name"], error_type=state["error_type"])
         
         strategy_database = state.get("strategy_database", {})
         error_type = state["error_type"]
@@ -215,6 +216,10 @@ class ReflexiveK8sWorkflow:
         
         # Always try to use persistent strategies first
         persistent_strategies = self.strategy_db.get_strategies_for_error(error_type)
+        
+        logger.info(f"📚 DATABASE CHECK: Found {len(persistent_strategies)} persistent strategies")
+        for i, strat in enumerate(persistent_strategies):
+            logger.info(f"  📊 Strategy {i+1}: ID={strat.id}, Confidence={strat.confidence:.2f}, SuccessRate={strat.success_rate:.2f}, UsageCount={strat.usage_count}")
         
         selected_strategy = None
         
@@ -229,9 +234,20 @@ class ReflexiveK8sWorkflow:
             
             # Use persistent strategy with 80% probability to encourage learning
             import random
-            use_persistent = random.random() < 0.8  # 80% chance
+            dice_roll = random.random()
+            use_persistent = dice_roll < 0.8  # 80% chance
             
-            logger.info(f"Found {len(persistent_strategies)} persistent strategies, best: {best_persistent.id} (confidence: {best_persistent.confidence:.2f})")
+            logger.info("="*80)
+            logger.info("🎯 STRATEGY SELECTION DECISION POINT")
+            logger.info(f"📚 Found {len(persistent_strategies)} persistent strategies in database")
+            logger.info(f"🎲 Dice roll: {dice_roll:.3f} (threshold: 0.8)")
+            logger.info(f"💡 Decision: {'USE PERSISTENT' if use_persistent else 'SKIP PERSISTENT'} (80% chance to use)")
+            logger.info(f"🏆 Best persistent strategy: ID={best_persistent.id}")
+            logger.info(f"   📊 Confidence: {best_persistent.confidence:.2%}")
+            logger.info(f"   📈 Success Rate: {best_persistent.success_rate:.2%}")
+            logger.info(f"   🔢 Usage Count: {best_persistent.usage_count}")
+            logger.info(f"   📅 Last Used: {getattr(best_persistent, 'last_used', 'Not available')}")
+            logger.info("="*80)
             
             if use_persistent:  # Prefer persistent strategies for learning
                 selected_strategy = {
@@ -246,7 +262,7 @@ class ReflexiveK8sWorkflow:
                     "success_rate": best_persistent.success_rate,
                     "decision_reasoning": f"Selected learned strategy '{best_persistent.id}' with {best_persistent.confidence:.2f} confidence based on {best_persistent.usage_count} previous uses (success rate: {best_persistent.success_rate:.1%}). Preferred over default strategies to leverage acquired knowledge."
                 }
-                logger.info("Selected high-confidence persistent strategy", 
+                logger.info("✅ SELECTED: Persistent strategy chosen for execution", 
                            strategy_id=best_persistent.id,
                            confidence=best_persistent.confidence)
         
@@ -499,9 +515,10 @@ class ReflexiveK8sWorkflow:
                 
             logger.info(f"Real execution time: {real_execution_time:.2f}s (simulated: {execution_time:.2f}s)")
         else:
-            # Fallback to simulated time if no start_time
+            # Set execution_start_time if not exists and use simulated time
+            state["execution_start_time"] = datetime.now()
             state["resolution_time"] = execution_time
-            logger.warning("No execution_start_time found, using simulated time")
+            logger.info(f"Using simulated execution time: {execution_time:.2f}s")
         
         return state
     
