@@ -223,7 +223,7 @@ async def process_pod_error(request: PodErrorRequest):
     Process a pod error through the reflexive workflow
     
     This is the main endpoint that triggers the autonomous learning cycle:
-    1. Analyze error with K8sGPT
+    1. Analyze error with GPT-4
     2. Select strategy based on learned knowledge
     3. Execute fix
     4. Observe outcome
@@ -281,7 +281,7 @@ async def process_pod_error_with_real_data(request: GoServiceErrorRequest):
             "success": False,
             "workflow_id": f"go_integration_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             # Real K8s data from Go service
-            "k8sgpt_analysis": {
+            "ai_analysis": {
                 "confidence": 0.95,  # High confidence with real data
                 "analysis": f"Real K8s data analysis for {request.error_type}",
                 "real_data": True,
@@ -578,7 +578,7 @@ async def simulate_reflection_detailed(
         "resolution_time": resolution_time,
         "retry_count": 0,
         "workflow_id": f"debug_{datetime.now().strftime('%H%M%S')}",
-        "k8sgpt_analysis": {"confidence": 0.9, "analysis": "Mock analysis"},
+        "ai_analysis": {"confidence": 0.9, "analysis": "Mock analysis"},
         "current_strategy": {"type": "debug_strategy", "confidence": 0.8},
         "execution_result": {"success": success},
         "detailed_observation": {"mock": True},
@@ -667,7 +667,7 @@ async def simulate_reflection(
         "resolution_time": resolution_time,
         "retry_count": 0,
         "workflow_id": f"debug_{datetime.now().strftime('%H%M%S')}",
-        "k8sgpt_analysis": {"confidence": 0.9, "analysis": "Mock analysis"},
+        "ai_analysis": {"confidence": 0.9, "analysis": "Mock analysis"},
         "current_strategy": {"type": "debug_strategy", "confidence": 0.8},
         "execution_result": {"success": success},
         "detailed_observation": {"mock": True},

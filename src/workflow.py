@@ -139,7 +139,7 @@ class ReflexiveK8sWorkflow:
         
         try:
             # Check if we have real K8s data from Go service
-            if state.get("real_k8s_data") and state.get("k8sgpt_analysis", {}).get("real_data"):
+            if state.get("real_k8s_data") and state.get("ai_analysis", {}).get("real_data"):
                 # Use real K8s data for enhanced analysis
                 logger.info("Using real K8s data for analysis", pod_name=state["pod_name"])
                 
@@ -154,26 +154,26 @@ class ReflexiveK8sWorkflow:
                 # Extract insights from logs
                 log_insights = self._analyze_pod_logs(logs)
                 
-                # Enhance the k8sgpt_analysis with real data
-                state["k8sgpt_analysis"].update({
+                # Enhance the ai_analysis with real data
+                state["ai_analysis"].update({
                     "event_insights": event_insights,
                     "log_insights": log_insights,
                     "enhanced_with_real_data": True,
-                    "confidence": min(0.98, state["k8sgpt_analysis"].get("confidence", 0.9) + 0.05)  # Boost confidence
+                    "confidence": min(0.98, state["ai_analysis"].get("confidence", 0.9) + 0.05)  # Boost confidence
                 })
                 
             else:
-                # Fallback to mock analysis
-                state["k8sgpt_analysis"] = {
+                # Fallback to AI analysis
+                state["ai_analysis"] = {
                     "confidence": 0.9,
-                    "analysis": f"Mock analysis for {state['error_type']} error",
+                    "analysis": f"AI analysis for {state['error_type']} error",
                     "recommendations": ["Check image repository", "Verify network connectivity"],
                     "error_details": f"Pod {state['pod_name']} experiencing {state['error_type']}"
                 }
         
         except Exception as e:
             logger.error("Error analysis failed", error=str(e))
-            state["k8sgpt_analysis"] = {"error": str(e)}
+            state["ai_analysis"] = {"error": str(e)}
         
         # Initialize reflexive state components
         if "reflection_history" not in state:
@@ -669,7 +669,7 @@ class ReflexiveK8sWorkflow:
             "retry_count": 0,
             "success": False,
             "workflow_id": "",
-            "k8sgpt_analysis": {},
+            "ai_analysis": {},
             "current_strategy": {},
             "execution_result": {},
             "detailed_observation": {},

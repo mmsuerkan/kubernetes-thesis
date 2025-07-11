@@ -48,7 +48,7 @@ class ReflexiveK8sState(TypedDict):
     pod_name: str
     namespace: str
     error_type: str
-    k8sgpt_analysis: Dict[str, Any]
+    ai_analysis: Dict[str, Any]
     current_strategy: Dict[str, Any]
     execution_result: Dict[str, Any]
     success: bool

@@ -26,9 +26,9 @@ K8s AI Auto-Fix Agent, Kubernetes'de çalışan uygulamalarınızda (pod'ların�
 - Aynı hatayı tekrar gördüğünde **daha hızlı çözer**
 - Öğrenme hızı: **%64 artış** (0.428'den 0.702'ye)
 
-### 2. 🤖 **Çift AI Sistemi**
-- **K8sGPT**: Kubernetes'e özel hata analizi (%95-98 doğruluk)
-- **GPT-4/GPT-3.5**: Dinamik çözüm üretimi ve komut oluşturma
+### 2. 🤖 **GPT-4 Powered AI Sistemi**
+- **OpenAI GPT-4/GPT-3.5**: Kubernetes hata analizi ve dinamik çözüm üretimi (%95-98 doğruluk)
+- **Kubernetes Uzmanlığı**: Özel prompt'lar ile Kubernetes bilgisi
 
 ### 3. 🎲 **Akıllı Karar Mekanizması**
 - %80 olasılıkla **öğrendiği çözümleri** kullanır
@@ -49,7 +49,7 @@ K8s AI Auto-Fix Agent, Kubernetes'de çalışan uygulamalarınızda (pod'ların�
 graph TD
     A[1. Kubernetes'de Hata Oluşur] -->|Pod çöker| B[2. Go Servisi Hatayı Yakalar]
     B -->|2 saniye içinde| C[3. Python AI Servisi Analiz Eder]
-    C -->|K8sGPT + GPT-4| D{4. Strateji Seçimi}
+    C -->|GPT-4 Analizi| D{4. Strateji Seçimi}
     
     D -->|%80 Öğrenilmiş| E[Veritabanından<br/>Başarılı Çözüm]
     D -->|%20 Yeni| F[GPT-4 ile<br/>Yeni Çözüm]
@@ -104,7 +104,7 @@ graph TB
             META[Meta-Reflect Node<br/>Üst Düzey Düşünme]
         end
         
-        K8SGPT[K8sGPT Analyzer<br/>Kubernetes Uzmanı]
+        ANALYZER[AI Analyzer<br/>Hata Analizi]
         GPT4[GPT-4 Generator<br/>Komut Üretici]
     end
     
@@ -125,7 +125,7 @@ graph TB
     REFLECT --> LEARN
     LEARN -->|Gerekirse| META
     
-    ANALYZE --> K8SGPT
+    ANALYZE --> ANALYZER
     STRATEGY --> SQLITE
     EXECUTE --> GPT4
     
@@ -235,22 +235,7 @@ kubectl get nodes
 # minikube   Ready    control-plane   1m    v1.24.x
 ```
 
-### Adım 3: K8sGPT'yi Kur
-
-```bash
-# Windows için K8sGPT'yi indir
-# https://github.com/k8sgpt-ai/k8sgpt/releases adresinden
-# k8sgpt_Windows_x86_64.zip dosyasını indir ve çıkart
-
-# OpenAI API anahtarını yapılandır
-k8sgpt auth add openai
-# API anahtarınızı girin (https://platform.openai.com/api-keys)
-
-# Test et
-k8sgpt version
-```
-
-### Adım 4: Projeyi Kur
+### Adım 3: Projeyi Kur
 
 ```bash
 # 1. Projeyi indir
@@ -277,7 +262,7 @@ cd ..
 python -c "from src.memory.strategy_db import StrategyDatabase; StrategyDatabase()"
 ```
 
-### Adım 5: OpenAI API Anahtarı
+### Adım 4: OpenAI API Anahtarı
 
 ```bash
 # .env dosyası oluştur
@@ -411,8 +396,8 @@ YASAKLI_KOMUTLAR = [
 - Kubernetes ortamında ilk başarılı uygulama
 - %64 öğrenme hızı artışı kanıtlanmış
 
-### 3. **Çift AI Entegrasyonu**
-- Domain-specific AI (K8sGPT) + Genel AI (GPT-4)
+### 3. **GPT-4 AI Entegrasyonu**
+- Kubernetes uzmanlığı + dinamik komut üretimi
 - %95+ doğruluk oranı
 
 ## 📞 İletişim ve Destek

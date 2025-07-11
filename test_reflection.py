@@ -25,7 +25,7 @@ async def test_reflection():
         "resolution_time": 45.0,
         "retry_count": 0,
         "workflow_id": "test_123",
-        "k8sgpt_analysis": {
+        "ai_analysis": {
             "confidence": 0.95,
             "analysis": "Image not found in registry"
         },
