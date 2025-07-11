@@ -18,6 +18,9 @@ from .state import ReflexiveK8sState
 from .nodes.observe import ObservationEngine
 from .nodes.reflect import ReflectionEngine
 from .nodes.learn import LearningEngine
+from .memory.strategy_db import StrategyDatabase, Strategy
+from .memory.episodic_memory import EpisodicMemoryManager, EpisodicMemory
+from .memory.performance_tracker import PerformanceTracker
 
 logger = structlog.get_logger()
 
@@ -37,6 +40,11 @@ class ReflexiveK8sWorkflow:
             reflection_depth=reflection_depth
         )
         self.learning_engine = LearningEngine()
+        
+        # Initialize persistent memory system
+        self.strategy_db = StrategyDatabase()
+        self.episodic_memory = EpisodicMemoryManager()
+        self.performance_tracker = PerformanceTracker()
         
         # Build workflow
         self.workflow = self._build_reflexive_workflow()
@@ -162,9 +170,11 @@ class ReflexiveK8sWorkflow:
         if "improvement_trajectory" not in state:
             state["improvement_trajectory"] = []
         
-        # Set workflow metadata
-        state["workflow_id"] = f"reflexive_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(state['pod_name']) % 1000}"
-        state["execution_start_time"] = datetime.now()
+        # Set workflow metadata with explicit timing
+        start_time = datetime.now()
+        state["workflow_id"] = f"reflexive_{start_time.strftime('%Y%m%d_%H%M%S')}_{hash(state['pod_name']) % 1000}"
+        state["execution_start_time"] = start_time
+        logger.info(f"🕐 Workflow started at: {start_time.isoformat()}")
         
         return state
     
@@ -175,55 +185,104 @@ class ReflexiveK8sWorkflow:
         strategy_database = state.get("strategy_database", {})
         error_type = state["error_type"]
         
-        # Find relevant strategies from learned knowledge
+        # Find relevant strategies from learned knowledge (both persistent and in-memory)
         relevant_strategies = self._find_relevant_strategies(error_type, state, strategy_database)
         
-        if relevant_strategies:
-            # Select best strategy based on confidence and context
+        # Always try to use persistent strategies first
+        persistent_strategies = self.strategy_db.get_strategies_for_error(error_type)
+        
+        selected_strategy = None
+        
+        # Strategy selection priority (PREFER LEARNING):
+        # 1. ANY persistent strategies (give learning a chance)
+        # 2. Relevant in-memory strategies  
+        # 3. Default strategies (only as last resort)
+        
+        if persistent_strategies:
+            # ALWAYS prefer persistent strategies to encourage learning
+            best_persistent = max(persistent_strategies, key=lambda s: max(s.confidence, 0.1))
+            
+            # Use persistent strategy with 80% probability to encourage learning
+            import random
+            use_persistent = random.random() < 0.8  # 80% chance
+            
+            logger.info(f"Found {len(persistent_strategies)} persistent strategies, best: {best_persistent.id} (confidence: {best_persistent.confidence:.2f})")
+            
+            if use_persistent:  # Prefer persistent strategies for learning
+                selected_strategy = {
+                    "id": best_persistent.id,
+                    "type": best_persistent.error_type,
+                    "action": "learned_strategy",
+                    "confidence": best_persistent.confidence,
+                    "parameters": best_persistent.actions,
+                    "conditions": best_persistent.conditions,
+                    "selection_reason": "high_confidence_persistent",
+                    "usage_count": best_persistent.usage_count,
+                    "success_rate": best_persistent.success_rate,
+                    "decision_reasoning": f"Selected learned strategy '{best_persistent.id}' with {best_persistent.confidence:.2f} confidence based on {best_persistent.usage_count} previous uses (success rate: {best_persistent.success_rate:.1%}). Preferred over default strategies to leverage acquired knowledge."
+                }
+                logger.info("Selected high-confidence persistent strategy", 
+                           strategy_id=best_persistent.id,
+                           confidence=best_persistent.confidence)
+        
+        if not selected_strategy and relevant_strategies:
+            # Use best in-memory strategy
             selected_strategy = self._select_best_strategy(relevant_strategies, state)
-            logger.info("Selected learned strategy", 
+            logger.info("Selected in-memory strategy", 
                        strategy_type=selected_strategy.get("type"),
                        confidence=selected_strategy.get("confidence"))
-        else:
+        
+        if not selected_strategy:
             # Fallback to default strategy
             selected_strategy = self._get_default_strategy(error_type, state)
-            logger.info("Using default strategy", strategy_type=selected_strategy.get("type"))
+            logger.info("Using default strategy fallback", strategy_type=selected_strategy.get("type"))
         
         state["current_strategy"] = selected_strategy
         return state
     
     def _find_relevant_strategies(self, error_type: str, state: ReflexiveK8sState, 
                                 strategy_database: Dict[str, Any]) -> list[Dict[str, Any]]:
-        """Find strategies relevant to current error and context"""
+        """Find strategies relevant to current error and context using persistent storage"""
         
+        # Get strategies from persistent database
+        context = {
+            "namespace": state["namespace"],
+            "cluster_size": state.get("cluster_size", "small")
+        }
+        
+        persistent_strategies = self.strategy_db.get_strategies_for_error(error_type, context)
+        
+        # Convert Strategy objects to dict format for compatibility
         relevant = []
+        for strategy in persistent_strategies:
+            strategy_dict = {
+                "id": strategy.id,
+                "type": strategy.error_type,
+                "actions": strategy.actions,
+                "confidence": strategy.confidence,
+                "success_rate": strategy.success_rate,
+                "conditions": strategy.conditions,
+                "usage_count": strategy.usage_count,
+                "context": strategy.context
+            }
+            relevant.append(strategy_dict)
         
+        # Also check in-memory strategies (fallback)
         for strategy_id, strategy in strategy_database.items():
-            # Check if strategy applies to current error type
             conditions = strategy.get("conditions", [])
-            
             strategy_relevant = False
             
-            # Check error type matching
             if f"error_type == '{error_type}'" in conditions:
                 strategy_relevant = True
-            
-            # Check namespace matching
             if f"namespace == '{state['namespace']}'" in conditions:
                 strategy_relevant = True
-            
-            # Check general applicability
-            if "general_optimization" in conditions:
+            if strategy.get("confidence", 0.0) >= 0.6:
                 strategy_relevant = True
             
-            # Check confidence threshold
-            if strategy.get("confidence", 0.0) >= self.learning_engine.strategy_confidence_threshold:
-                strategy_relevant = True
-            
-            if strategy_relevant:
+            if strategy_relevant and strategy not in relevant:
                 relevant.append(strategy)
         
-        # Sort by confidence and usage success
+        # Sort by performance metrics
         relevant.sort(key=lambda s: (s.get("confidence", 0.0), s.get("success_rate", 0.0)), reverse=True)
         
         return relevant[:3]  # Top 3 relevant strategies
@@ -308,34 +367,116 @@ class ReflexiveK8sWorkflow:
             "no_strategy_available": "No specific strategy available - requires human investigation."
         }
         
-        return reasoning_templates.get(selection_reason, "Strategy selection reasoning not available.")
+        base_reasoning = reasoning_templates.get(selection_reason, "Strategy selected based on available options.")
+        
+        # Add detailed context
+        confidence = strategy.get("confidence", 0.0)
+        usage_count = strategy.get("usage_count", 0)
+        
+        if confidence > 0 and usage_count > 0:
+            detailed_reasoning = f"{base_reasoning} This strategy has {confidence:.1%} confidence from {usage_count} previous applications."
+        else:
+            detailed_reasoning = base_reasoning
+            
+        return detailed_reasoning
     
     async def _execute_fix_node(self, state: ReflexiveK8sState) -> ReflexiveK8sState:
         """Execute the selected strategy"""
         logger.info("Executing fix strategy", pod_name=state["pod_name"])
         
         try:
-            # Simulate fix execution since we're running standalone
+            # Simulate fix execution with realistic timing
             import random
-            success = random.choice([True, True, False])  # 66% success rate
+            import time
+            
+            # Simulate realistic execution time based on strategy type
+            strategy_type = state.get("current_strategy", {}).get("type", "default")
+            
+            # Strategy performance based on type and confidence
+            strategy_confidence = state.get("current_strategy", {}).get("confidence", 0.5)
+            
+            if "learned" in strategy_type or "adaptive" in strategy_type or "high_confidence_persistent" in state.get("current_strategy", {}).get("selection_reason", ""):
+                # Learned strategies: Better performance as confidence increases
+                base_time = random.uniform(10.0, 25.0)  # Faster execution
+                success_rate = min(0.95, 0.6 + (strategy_confidence * 0.4))  # Confidence-based success
+                logger.info(f"Using learned strategy with confidence-based success rate: {success_rate:.2f}")
+            else:
+                # Default strategies: Consistent but slower
+                base_time = random.uniform(30.0, 60.0)
+                success_rate = 0.75  # Moderate success rate
+            
+            success = random.random() < success_rate
+            execution_time = base_time + (random.uniform(5.0, 20.0) if not success else 0)
             
             state["execution_result"] = {
                 "success": success,
                 "message": f"Mock execution of {state.get('current_strategy', {}).get('type', 'default')} strategy",
-                "execution_time": 45.2 if success else 120.0,
+                "execution_time": execution_time,
                 "details": f"Simulated fix for {state['error_type']} on pod {state['pod_name']}"
             }
             state["success"] = success
+            
+            # Record performance in persistent storage
+            strategy = state.get("current_strategy", {})
+            if strategy.get("id"):
+                confidence_before = strategy.get("confidence", 0.5)
+                new_confidence = self.performance_tracker.record_performance(
+                    strategy_id=strategy["id"],
+                    success=success,
+                    resolution_time=execution_time,
+                    confidence_before=confidence_before,
+                    context={
+                        "namespace": state["namespace"],
+                        "error_type": state["error_type"],
+                        "pod_name": state["pod_name"]
+                    }
+                )
+                
+                # Update strategy confidence
+                strategy["confidence"] = new_confidence
+                state["current_strategy"] = strategy
+                
+                # Always update persistent strategy database for ANY learned strategy
+                learned_reasons = ["high_confidence_persistent", "highest_confidence_learned", "learned_strategy"]
+                if any(reason in strategy.get("selection_reason", "") for reason in learned_reasons):
+                    self.strategy_db.update_strategy_performance(
+                        strategy_id=strategy["id"],
+                        success=success,
+                        execution_time=execution_time,
+                        pod_name=state["pod_name"],
+                        namespace=state["namespace"],
+                        feedback=f"Execution result: {'success' if success else 'failure'}, time: {execution_time:.1f}s"
+                    )
+                    logger.info(f"✅ Updated persistent strategy performance: {strategy['id']} (success={success}, time={execution_time:.1f}s)")
+                    
+                    # Force update strategy confidence in current state
+                    strategy["usage_count"] = strategy.get("usage_count", 0) + 1
+                    strategy["last_used"] = datetime.now().isoformat()
+                    state["current_strategy"] = strategy
+                else:
+                    logger.info(f"Recorded performance for strategy: {strategy['id']} (type: {strategy.get('selection_reason', 'unknown')})")
+            else:
+                logger.warning("No strategy ID found for performance tracking")
         
         except Exception as e:
             logger.error("Fix execution failed", error=str(e))
             state["execution_result"] = {"success": False, "error": str(e)}
             state["success"] = False
         
-        # Calculate execution time
+        # Calculate REAL execution time (overriding simulation time)
         if "execution_start_time" in state:
-            execution_time = (datetime.now() - state["execution_start_time"]).total_seconds()
+            real_execution_time = (datetime.now() - state["execution_start_time"]).total_seconds()
+            state["resolution_time"] = real_execution_time
+            
+            # Update execution_result with real time
+            if "execution_result" in state:
+                state["execution_result"]["execution_time"] = real_execution_time
+                
+            logger.info(f"Real execution time: {real_execution_time:.2f}s (simulated: {execution_time:.2f}s)")
+        else:
+            # Fallback to simulated time if no start_time
             state["resolution_time"] = execution_time
+            logger.warning("No execution_start_time found, using simulated time")
         
         return state
     
@@ -344,22 +485,27 @@ class ReflexiveK8sWorkflow:
     def _should_reflect(self, state: ReflexiveK8sState) -> Literal["reflect", "skip_reflection"]:
         """Decide whether to perform reflection"""
         
-        # Always reflect for now - in production, this could be more selective
+        # FOR TESTING: Always reflect to generate persistent data
+        # TODO: Make this more selective in production
+        
         reflection_triggers = [
             state.get("success") is False,  # Always reflect on failures
             state.get("retry_count", 0) > 0,  # Reflect on retries
-            len(state.get("reflection_history", [])) == 0,  # First reflection
+            len(state.get("reflection_history", [])) == 0,  # First reflection - ALWAYS true initially
             state.get("resolution_time", 0) > 60,  # Slow resolutions
+            True  # FORCE REFLECTION FOR TESTING - always reflect for now
         ]
         
         # Also reflect randomly on successes for continuous learning
         import random
-        if state.get("success") and random.random() < 0.3:  # 30% chance
+        if state.get("success") and random.random() < 0.8:  # 80% chance (increased for testing)
             reflection_triggers.append(True)
         
         if any(reflection_triggers):
+            logger.info(f"REFLECTION TRIGGERED for pod {state.get('pod_name')}: triggers={reflection_triggers}")
             return "reflect"
         else:
+            logger.info(f"REFLECTION SKIPPED for pod {state.get('pod_name')}")
             return "skip_reflection"
     
     def _post_learning_routing(self, state: ReflexiveK8sState) -> Literal["success", "retry", "meta_reflect", "human_escalation", "deep_analysis"]:

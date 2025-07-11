@@ -54,6 +54,12 @@ debug*.bat
 test*.json
 reflexion_memory.json
 
+# SQLite databases
+*.db
+reflexion_strategies.db
+reflexion_episodes.db
+reflexion_performance.db
+
 # Go binaries
 *.exe
 \!k8s-ai-agent.exe

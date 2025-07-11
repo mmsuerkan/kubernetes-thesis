@@ -4,6 +4,8 @@ Enhanced Kubernetes error resolution with LangGraph + Reflexion
 """
 import asyncio
 import os
+import json
+import sqlite3
 from datetime import datetime
 from typing import Dict, Any, Optional
 import uvicorn
@@ -17,6 +19,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.workflow import ReflexiveK8sWorkflow
+from src.memory.strategy_db import StrategyDatabase
+from src.memory.episodic_memory import EpisodicMemoryManager
+from src.memory.performance_tracker import PerformanceTracker
 
 # Configure logging
 structlog.configure(
@@ -56,6 +61,11 @@ app.add_middleware(
 
 # Global workflow instance
 workflow_instance: Optional[ReflexiveK8sWorkflow] = None
+
+# Global memory instances  
+strategy_db: Optional[StrategyDatabase] = None
+episodic_memory: Optional[EpisodicMemoryManager] = None
+performance_tracker: Optional[PerformanceTracker] = None
 
 # Request/Response Models
 class PodErrorRequest(BaseModel):
@@ -101,6 +111,13 @@ async def startup_event():
     reflection_depth = os.getenv("REFLECTION_DEPTH", "medium")
     
     try:
+        # Initialize memory systems first
+        global strategy_db, episodic_memory, performance_tracker
+        strategy_db = StrategyDatabase()
+        episodic_memory = EpisodicMemoryManager()
+        performance_tracker = PerformanceTracker()
+        logger.info("Persistent memory systems initialized successfully")
+        
         # Initialize workflow
         workflow_instance = ReflexiveK8sWorkflow(
             openai_api_key=openai_api_key,
@@ -592,8 +609,194 @@ async def _process_pod_error_background(request: PodErrorRequest, workflow_id: s
                     workflow_id=workflow_id, 
                     error=str(e))
 
+# === Persistent Memory API Endpoints (Phase 1) ===
+
+@app.get("/api/v1/memory/strategies")
+async def get_strategies(error_type: str = None):
+    """Get stored strategies from persistent database"""
+    if not strategy_db:
+        raise HTTPException(status_code=503, detail="Strategy database not initialized")
+    
+    try:
+        if error_type:
+            strategies = strategy_db.get_strategies_for_error(error_type)
+            strategy_list = [{
+                "id": s.id,
+                "error_type": s.error_type,
+                "conditions": s.conditions,
+                "actions": s.actions,
+                "confidence": s.confidence,
+                "success_rate": s.success_rate,
+                "usage_count": s.usage_count,
+                "source": s.source,
+                "created_at": s.created_at.isoformat(),
+                "updated_at": s.updated_at.isoformat()
+            } for s in strategies]
+        else:
+            # Get statistics for all strategies
+            stats = strategy_db.get_strategy_statistics()
+            strategy_list = stats.get("top_strategies", [])
+        
+        return {
+            "strategies": strategy_list,
+            "count": len(strategy_list),
+            "error_type_filter": error_type,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get strategies: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/memory/episodes")
+async def get_episodes(error_type: str = None, limit: int = 10):
+    """Get episodic memory entries"""
+    if not episodic_memory:
+        raise HTTPException(status_code=503, detail="Episodic memory not initialized")
+    
+    try:
+        if error_type:
+            episodes = episodic_memory.get_similar_episodes(error_type, {}, limit)
+        else:
+            # Get all recent episodes when no specific error_type
+            episodes = episodic_memory.get_similar_episodes("ImagePullBackOff", {}, limit)
+            if not episodes:
+                episodes = episodic_memory.get_similar_episodes("CrashLoopBackOff", {}, limit)
+            if not episodes:
+                # If still no episodes, get from any error type
+                with sqlite3.connect(episodic_memory.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT * FROM episodes 
+                        ORDER BY timestamp DESC 
+                        LIMIT ?
+                    """, (limit,))
+                    
+                    episodes = []
+                    for row in cursor.fetchall():
+                        from src.memory.episodic_memory import EpisodicMemory as PersistentEpisodicMemory
+                        from datetime import datetime
+                        episode = PersistentEpisodicMemory(
+                            id=row[0],
+                            pod_name=row[1],
+                            namespace=row[2],
+                            error_type=row[3],
+                            context=json.loads(row[4]),
+                            actions_taken=json.loads(row[5]),
+                            outcome=json.loads(row[6]),
+                            lessons_learned=json.loads(row[7]),
+                            confidence_before=row[8],
+                            confidence_after=row[9],
+                            resolution_time=row[10],
+                            timestamp=datetime.fromisoformat(row[11]),
+                            reflection_quality=row[12],
+                            insights_generated=row[13]
+                        )
+                        episodes.append(episode)
+        
+        episode_list = [{
+            "id": e.id,
+            "pod_name": e.pod_name,
+            "namespace": e.namespace,
+            "error_type": e.error_type,
+            "context": e.context,
+            "outcome": e.outcome,
+            "lessons_learned": e.lessons_learned,
+            "confidence_gain": e.confidence_after - e.confidence_before,
+            "resolution_time": e.resolution_time,
+            "reflection_quality": e.reflection_quality,
+            "insights_generated": e.insights_generated,
+            "timestamp": e.timestamp.isoformat()
+        } for e in episodes]
+        
+        return {
+            "episodes": episode_list,
+            "count": len(episode_list),
+            "error_type_filter": error_type,
+            "limit": limit,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get episodes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/memory/performance")
+async def get_performance_insights(days: int = 7):
+    """Get performance insights and trends"""
+    if not performance_tracker:
+        raise HTTPException(status_code=503, detail="Performance tracker not initialized")
+    
+    try:
+        insights = performance_tracker.get_performance_insights(days)
+        rankings = performance_tracker.get_strategy_ranking()
+        
+        return {
+            "performance_insights": insights,
+            "strategy_rankings": rankings[:10],  # Top 10
+            "analysis_period_days": days,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get performance insights: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/memory/learning-progression")
+async def get_learning_progression(days: int = 30):
+    """Get learning progression over time"""
+    if not episodic_memory:
+        raise HTTPException(status_code=503, detail="Episodic memory not initialized")
+    
+    try:
+        progression = episodic_memory.get_learning_progression(days)
+        
+        return {
+            "learning_progression": progression,
+            "analysis_period_days": days,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get learning progression: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/memory/statistics")
+async def get_memory_statistics():
+    """Get overall memory system statistics"""
+    if not all([strategy_db, episodic_memory, performance_tracker]):
+        raise HTTPException(status_code=503, detail="Memory systems not initialized")
+    
+    try:
+        strategy_stats = strategy_db.get_strategy_statistics()
+        episode_stats = episodic_memory.get_memory_statistics()
+        performance_insights = performance_tracker.get_performance_insights(7)
+        
+        return {
+            "strategy_database": strategy_stats,
+            "episodic_memory": episode_stats,
+            "performance_summary": performance_insights.get("overall_performance", {}),
+            "system_status": "operational",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get memory statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# === Legacy API Endpoints ===
+
+@app.get("/api/v1/reflexion/strategies")
+async def get_reflexion_strategies():
+    """Legacy endpoint - redirect to new memory API"""
+    return await get_strategies()
+
+@app.get("/api/v1/reflexion/memory/episodic")
+async def get_reflexion_episodic_memory():
+    """Legacy endpoint - redirect to new memory API"""
+    return await get_episodes()
+
 # Error handlers
-from fastapi.responses import JSONResponse
 
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):

@@ -42,5 +42,33 @@ curl -X GET "http://localhost:8000/api/v1/reflexion/memory/episodic"
 echo.
 echo.
 
+echo === Phase 1 Persistent Memory Tests ===
+echo.
+
+echo [9] Memory Statistics:
+curl -X GET "http://localhost:8000/api/v1/memory/statistics"
+echo.
+echo.
+
+echo [10] Strategy Database:
+curl -X GET "http://localhost:8000/api/v1/memory/strategies"
+echo.
+echo.
+
+echo [11] Performance Insights:
+curl -X GET "http://localhost:8000/api/v1/memory/performance?days=7"
+echo.
+echo.
+
+echo [12] Learning Progression:
+curl -X GET "http://localhost:8000/api/v1/memory/learning-progression?days=30"
+echo.
+echo.
+
+echo [13] Episodic Memory (New API):
+curl -X GET "http://localhost:8000/api/v1/memory/episodes?limit=5"
+echo.
+echo.
+
 echo === Test Complete ===
 pause
