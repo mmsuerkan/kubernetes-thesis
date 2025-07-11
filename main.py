@@ -22,6 +22,7 @@ from src.workflow import ReflexiveK8sWorkflow
 from src.memory.strategy_db import StrategyDatabase
 from src.memory.episodic_memory import EpisodicMemoryManager
 from src.memory.performance_tracker import PerformanceTracker
+from src.executor.ai_command_generator import AICommandGenerator
 
 # Configure logging
 structlog.configure(
@@ -66,6 +67,7 @@ workflow_instance: Optional[ReflexiveK8sWorkflow] = None
 strategy_db: Optional[StrategyDatabase] = None
 episodic_memory: Optional[EpisodicMemoryManager] = None
 performance_tracker: Optional[PerformanceTracker] = None
+ai_command_generator: Optional[AICommandGenerator] = None
 
 # Request/Response Models
 class PodErrorRequest(BaseModel):
@@ -108,6 +110,45 @@ class WorkflowStatusResponse(BaseModel):
     progress: float
     reflexion_metrics: Dict[str, Any]
 
+# NEW: Command execution models
+class CommandExecutionRequest(BaseModel):
+    pod_name: str = Field(..., description="Name of the pod")
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+    error_type: str = Field(..., description="Type of error (e.g., ImagePullBackOff)")
+    strategy: Dict[str, Any] = Field(..., description="Strategy from reflexion")
+    real_k8s_data: RealK8sData = Field(..., description="Real Kubernetes data")
+    dry_run: bool = Field(default=False, description="Whether to execute in dry-run mode")
+
+class CommandExecutionResponse(BaseModel):
+    pod_name: str
+    namespace: str
+    error_type: str
+    commands_generated: int
+    commands_executed: int
+    success: bool
+    execution_time: float
+    commands: Dict[str, Any]  # Generated commands
+    go_service_url: str = Field(..., description="URL to call Go service for execution")
+    message: str
+
+# NEW: Execution feedback models
+class ExecutionFeedbackRequest(BaseModel):
+    workflow_id: str = Field(..., description="Original workflow ID")
+    pod_name: str = Field(..., description="Pod name")
+    namespace: str = Field(default="default", description="Namespace")
+    error_type: str = Field(..., description="Error type")
+    strategy_used: Dict[str, Any] = Field(..., description="Strategy that was used")
+    execution_result: Dict[str, Any] = Field(..., description="Execution results")
+    timestamp: str = Field(..., description="Timestamp of execution")
+
+class ExecutionFeedbackResponse(BaseModel):
+    workflow_id: str
+    feedback_processed: bool
+    reflexion_updated: bool
+    strategy_confidence_updated: bool
+    learning_summary: Dict[str, Any]
+    message: str
+
 # Startup/Shutdown events
 @app.on_event("startup")
 async def startup_event():
@@ -127,10 +168,11 @@ async def startup_event():
     
     try:
         # Initialize memory systems first
-        global strategy_db, episodic_memory, performance_tracker
+        global strategy_db, episodic_memory, performance_tracker, ai_command_generator
         strategy_db = StrategyDatabase()
         episodic_memory = EpisodicMemoryManager()
         performance_tracker = PerformanceTracker()
+        ai_command_generator = AICommandGenerator(openai_api_key)
         logger.info("Persistent memory systems initialized successfully")
         
         # Initialize workflow
@@ -269,7 +311,8 @@ async def process_pod_error_with_real_data(request: GoServiceErrorRequest):
             "temporal_context": {},
             "performance_metrics": {},
             "improvement_trajectory": [],
-            "execution_start_time": datetime.now()
+            "execution_start_time": datetime.now(),
+            "workflow_id": f"go_integration_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         }
         
         # Process through reflexive workflow
@@ -914,6 +957,183 @@ async def not_found_handler(request: Request, exc):
         status_code=404,
         content={"error": "Endpoint not found", "path": request.url.path}
     )
+
+# NEW: Phase 3.3 - kubectl Command Execution Endpoint
+@app.post("/api/v1/executor/generate-commands", response_model=CommandExecutionResponse)
+async def generate_kubectl_commands(request: CommandExecutionRequest):
+    """
+    Generate kubectl commands for pod error fixing
+    
+    This endpoint uses AI to generate kubectl commands based on the error type
+    and real K8s data, then returns the command URL for Go service execution.
+    """
+    if not ai_command_generator:
+        raise HTTPException(status_code=503, detail="AI Command Generator not initialized")
+    
+    logger.info("Generating kubectl commands", 
+                pod_name=request.pod_name, 
+                error_type=request.error_type,
+                dry_run=request.dry_run)
+    
+    start_time = datetime.now()
+    
+    try:
+        # Convert real K8s data to the format expected by AI generator
+        ai_real_k8s_data = {
+            "pod": request.real_k8s_data.pod_spec,
+            "events": request.real_k8s_data.events,
+            "logs": request.real_k8s_data.logs
+        }
+        
+        # Generate commands using AI
+        commands = await ai_command_generator.generate_kubectl_commands(
+            error_type=request.error_type,
+            pod_name=request.pod_name,
+            namespace=request.namespace,
+            strategy=request.strategy,
+            real_k8s_data=ai_real_k8s_data
+        )
+        
+        # Calculate execution time
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        # Count total commands
+        total_commands = sum(len(cmd_list) for cmd_list in commands.values())
+        
+        # Prepare Go service URL for command execution
+        go_service_url = f"http://localhost:8080/api/v1/execute-commands"
+        
+        response = CommandExecutionResponse(
+            pod_name=request.pod_name,
+            namespace=request.namespace,
+            error_type=request.error_type,
+            commands_generated=total_commands,
+            commands_executed=0,  # Will be updated by Go service
+            success=True,
+            execution_time=execution_time,
+            commands=commands,
+            go_service_url=go_service_url,
+            message=f"Generated {total_commands} kubectl commands for {request.error_type}"
+        )
+        
+        logger.info("kubectl commands generated successfully",
+                   pod_name=request.pod_name,
+                   commands_count=total_commands,
+                   execution_time=execution_time)
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Failed to generate kubectl commands", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Command generation failed: {str(e)}")
+
+# NEW: Phase 3.7 - Execution Feedback for Reflexion Learning
+@app.post("/api/v1/reflexion/execution-feedback", response_model=ExecutionFeedbackResponse)
+async def process_execution_feedback(request: ExecutionFeedbackRequest):
+    """
+    Process execution feedback for reflexion learning
+    
+    This endpoint receives execution results from Go service and updates
+    the reflexion system with real-world performance data.
+    """
+    if not workflow_instance:
+        raise HTTPException(status_code=503, detail="Workflow not initialized")
+    
+    logger.info("Processing execution feedback for reflexion learning", 
+                workflow_id=request.workflow_id,
+                pod_name=request.pod_name,
+                execution_status=request.execution_result.get("status"))
+    
+    start_time = datetime.now()
+    
+    try:
+        # Extract execution results
+        execution_success = request.execution_result.get("success", False)
+        partial_success = request.execution_result.get("partial_success", False)
+        success_count = request.execution_result.get("success_count", 0)
+        total_commands = request.execution_result.get("total_commands", 0)
+        
+        # Calculate execution time and success rate
+        execution_time = (datetime.now() - start_time).total_seconds()
+        success_rate = success_count / total_commands if total_commands > 0 else 0.0
+        
+        # Update strategy database with real execution results
+        strategy_id = request.strategy_used.get("id", "unknown")
+        strategy_confidence_updated = False
+        
+        if strategy_db:
+            try:
+                strategy_db.update_strategy_performance(
+                    strategy_id=strategy_id,
+                    success=execution_success or partial_success,
+                    execution_time=execution_time,
+                    pod_name=request.pod_name,
+                    namespace=request.namespace,
+                    feedback=f"Real execution: {success_count}/{total_commands} commands succeeded"
+                )
+                strategy_confidence_updated = True
+                logger.info("Strategy performance updated", strategy_id=strategy_id, success_rate=success_rate)
+            except Exception as e:
+                logger.error("Failed to update strategy performance", error=str(e))
+        
+        # Update episodic memory with real execution outcome
+        reflexion_updated = False
+        if episodic_memory:
+            try:
+                episode_data = {
+                    "workflow_id": request.workflow_id,
+                    "pod_name": request.pod_name,
+                    "error_type": request.error_type,
+                    "strategy_used": request.strategy_used,
+                    "execution_result": request.execution_result,
+                    "success_rate": success_rate,
+                    "lessons_learned": [
+                        f"Strategy {strategy_id} achieved {success_rate:.1%} success rate",
+                        f"Execution pattern: {success_count}/{total_commands} commands succeeded"
+                    ]
+                }
+                
+                episodic_memory.store_episode(
+                    action_taken=request.strategy_used,
+                    outcome={"success": execution_success, "success_rate": success_rate},
+                    lessons_learned=episode_data["lessons_learned"]
+                )
+                reflexion_updated = True
+                logger.info("Episodic memory updated with real execution results")
+            except Exception as e:
+                logger.error("Failed to update episodic memory", error=str(e))
+        
+        # Prepare learning summary
+        learning_summary = {
+            "strategy_id": strategy_id,
+            "original_confidence": request.strategy_used.get("confidence", 0.0),
+            "execution_success_rate": success_rate,
+            "commands_executed": total_commands,
+            "commands_succeeded": success_count,
+            "learning_outcome": "success" if execution_success else "partial" if partial_success else "failure",
+            "reflexion_cycle_completed": reflexion_updated and strategy_confidence_updated
+        }
+        
+        response = ExecutionFeedbackResponse(
+            workflow_id=request.workflow_id,
+            feedback_processed=True,
+            reflexion_updated=reflexion_updated,
+            strategy_confidence_updated=strategy_confidence_updated,
+            learning_summary=learning_summary,
+            message=f"Reflexion learning completed for {request.pod_name} with {success_rate:.1%} success rate"
+        )
+        
+        logger.info("Execution feedback processed successfully",
+                   workflow_id=request.workflow_id,
+                   reflexion_updated=reflexion_updated,
+                   strategy_updated=strategy_confidence_updated,
+                   success_rate=success_rate)
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Failed to process execution feedback", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Feedback processing failed: {str(e)}")
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):

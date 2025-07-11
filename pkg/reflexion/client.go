@@ -21,7 +21,7 @@ func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second, // 30 seconds timeout
+			Timeout: 120 * time.Second, // 120 seconds timeout for AI processing
 		},
 	}
 }
@@ -51,6 +51,9 @@ type ReflexionResponse struct {
 	RequiresHumanIntervention bool                   `json:"requires_human_intervention"`
 	ReflexionSummary          map[string]interface{} `json:"reflexion_summary"`
 }
+
+// ProcessPodErrorResponse is an alias for ReflexionResponse
+type ProcessPodErrorResponse = ReflexionResponse
 
 // ProcessPodError sends a pod error to the reflexion service
 func (c *Client) ProcessPodError(pod *v1.Pod, events []v1.Event, logs []string, errorType string) (*ReflexionResponse, error) {

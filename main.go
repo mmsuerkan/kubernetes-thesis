@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"k8s-real-integration-go/pkg/k8s"
 	"k8s-real-integration-go/pkg/reflexion"
 	"k8s-real-integration-go/pkg/watcher"
+	"k8s-real-integration-go/pkg/server"
 )
 
 func main() {
@@ -22,6 +24,9 @@ func main() {
 		namespace      = flag.String("namespace", "default", "Namespace to monitor")
 		reflexionURL   = flag.String("reflexion-url", "http://localhost:8000", "Reflexion service URL")
 		testMode       = flag.Bool("test-mode", false, "Run in test mode (mock pod)")
+		httpPort       = flag.Int("http-port", 8080, "HTTP server port for kubectl execution")
+		dryRun         = flag.Bool("dry-run", false, "Enable dry-run mode for kubectl commands")
+		commandTimeout = flag.Int("command-timeout", 60, "Timeout for kubectl commands in seconds")
 	)
 	flag.Parse()
 
@@ -35,6 +40,8 @@ func main() {
 	// Real-time monitoring mode
 	fmt.Printf("🔍 Starting real-time monitoring for namespace: %s\n", *namespace)
 	fmt.Printf("📡 Reflexion service URL: %s\n", *reflexionURL)
+	fmt.Printf("🌐 HTTP server port: %d\n", *httpPort)
+	fmt.Printf("🧪 Dry-run mode: %v\n", *dryRun)
 
 	// Create Kubernetes client
 	k8sClient, err := k8s.NewClient()
@@ -50,6 +57,20 @@ func main() {
 		log.Fatalf("❌ Reflexion service health check failed: %v", err)
 	}
 	fmt.Println("✅ Reflexion service connection verified")
+
+	// Create HTTP server for kubectl command execution
+	httpServer := server.NewHTTPServer(*httpPort, *dryRun, time.Duration(*commandTimeout)*time.Second)
+
+	// Start HTTP server in a goroutine
+	go func() {
+		log.Printf("🌐 Starting HTTP server on port %d...", *httpPort)
+		if err := httpServer.Start(); err != nil {
+			log.Fatalf("❌ Failed to start HTTP server: %v", err)
+		}
+	}()
+
+	// Give HTTP server time to start
+	time.Sleep(2 * time.Second)
 
 	// Create pod watcher
 	podWatcher := watcher.NewPodWatcher(k8sClient, reflexionClient, *namespace)
@@ -68,6 +89,11 @@ func main() {
 	fmt.Println("   kubectl run broken-nginx --image=nginx:nonexistent-tag")
 	fmt.Println("   kubectl run broken-app --image=invalid-image:latest")
 	fmt.Println("💡 Press Ctrl+C to stop monitoring")
+	fmt.Println("")
+	fmt.Println("🌐 HTTP Endpoints Available:")
+	fmt.Printf("   Health: http://localhost:%d/api/v1/health\n", *httpPort)
+	fmt.Printf("   Execute: http://localhost:%d/api/v1/execute-commands\n", *httpPort)
+	fmt.Printf("   Status: http://localhost:%d/api/v1/kubectl-status\n", *httpPort)
 
 	// Wait for signal
 	<-sigCh
@@ -94,7 +120,23 @@ func main() {
 func runTestMode(reflexionURL string) {
 	fmt.Println("🧪 Running mock pod test...")
 	
-	// Import the old test code here
+	// Simple test for now
 	testMockPod(reflexionURL)
+}
+
+// testMockPod runs a simple mock test
+func testMockPod(reflexionURL string) {
+	fmt.Printf("🔧 Testing reflexion service at: %s\n", reflexionURL)
+	
+	// Create reflexion client
+	reflexionClient := reflexion.NewClient(reflexionURL)
+	
+	// Test health check
+	if err := reflexionClient.HealthCheck(); err != nil {
+		fmt.Printf("❌ Mock test failed: %v\n", err)
+		return
+	}
+	
+	fmt.Println("✅ Mock test completed successfully")
 }
 

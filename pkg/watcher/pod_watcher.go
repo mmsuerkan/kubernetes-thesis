@@ -1,8 +1,11 @@
 package watcher
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -176,6 +179,12 @@ func (pw *PodWatcher) processPod(pod *v1.Pod) {
 		log.Printf("🚨 Human intervention required for pod %s", podKey)
 	} else {
 		log.Printf("🤖 AI strategy available for pod %s", podKey)
+		
+		// Phase 3.4: Generate and execute kubectl commands
+		err := pw.generateAndExecuteCommands(pod, response, errorType)
+		if err != nil {
+			log.Printf("❌ Failed to generate/execute commands for pod %s: %v", podKey, err)
+		}
 	}
 }
 
@@ -216,4 +225,188 @@ func (pw *PodWatcher) ResetProcessedPods() {
 
 	pw.processedPods = make(map[string]bool)
 	log.Printf("🔄 Processed pods list reset")
+}
+
+// generateAndExecuteCommands generates kubectl commands using AI and executes them
+func (pw *PodWatcher) generateAndExecuteCommands(pod *v1.Pod, response *reflexion.ProcessPodErrorResponse, errorType string) error {
+	log.Printf("🔧 Generating kubectl commands for pod %s", pod.Name)
+	
+	// Step 1: Call Python service to generate commands
+	commands, err := pw.generateCommands(pod, response, errorType)
+	if err != nil {
+		return fmt.Errorf("failed to generate commands: %v", err)
+	}
+	
+	log.Printf("✅ Generated %d command categories", len(commands))
+	
+	// Step 2: Execute commands via local HTTP server
+	executionResult, err := pw.executeCommands(pod, commands, errorType)
+	if err != nil {
+		return fmt.Errorf("failed to execute commands: %v", err)
+	}
+	
+	log.Printf("📊 Execution result: %s (%d/%d commands succeeded)", 
+		executionResult.Status, executionResult.SuccessCount, executionResult.TotalCommands)
+	
+	// Step 3: Send execution feedback to Python service for reflexion
+	err = pw.sendExecutionFeedback(pod, response, executionResult, errorType)
+	if err != nil {
+		log.Printf("⚠️  Failed to send execution feedback: %v", err)
+		// Continue anyway, don't fail the whole process
+	}
+	
+	return nil
+}
+
+// generateCommands calls Python service to generate kubectl commands
+func (pw *PodWatcher) generateCommands(pod *v1.Pod, response *reflexion.ProcessPodErrorResponse, errorType string) (map[string][]string, error) {
+	// Prepare request for Python service
+	requestData := map[string]interface{}{
+		"pod_name":   pod.Name,
+		"namespace":  pod.Namespace,
+		"error_type": errorType,
+		"strategy":   response.FinalStrategy,
+		"real_k8s_data": map[string]interface{}{
+			"pod_spec": map[string]interface{}{
+				"containers": []map[string]interface{}{
+					{
+						"name":  pod.Spec.Containers[0].Name,
+						"image": pod.Spec.Containers[0].Image,
+					},
+				},
+			},
+			"events": []map[string]interface{}{
+				{
+					"type":    "Warning",
+					"message": fmt.Sprintf("Pod %s has %s error", pod.Name, errorType),
+				},
+			},
+			"logs": []string{"Failed to retrieve logs"},
+		},
+		"dry_run": false,
+	}
+	
+	// Convert to JSON
+	jsonData, err := json.Marshal(requestData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+	
+	// Make HTTP request to Python service
+	pythonURL := "http://localhost:8000/api/v1/executor/generate-commands"
+	resp, err := http.Post(pythonURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call Python service: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Python service returned status %d", resp.StatusCode)
+	}
+	
+	// Parse response
+	var commandResponse struct {
+		Commands map[string][]string `json:"commands"`
+	}
+	
+	if err := json.NewDecoder(resp.Body).Decode(&commandResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+	
+	return commandResponse.Commands, nil
+}
+
+// executeCommands calls Go HTTP server to execute kubectl commands
+func (pw *PodWatcher) executeCommands(pod *v1.Pod, commands map[string][]string, errorType string) (*ExecutionResult, error) {
+	// Prepare request for Go HTTP server
+	requestData := map[string]interface{}{
+		"pod_name":   pod.Name,
+		"namespace":  pod.Namespace,
+		"error_type": errorType,
+		"commands":   commands,
+		"dry_run":    false,
+		"timeout":    120,
+	}
+	
+	// Convert to JSON
+	jsonData, err := json.Marshal(requestData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+	
+	// Make HTTP request to local Go server
+	goURL := "http://localhost:8080/api/v1/execute-commands"
+	resp, err := http.Post(goURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call Go HTTP server: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Go HTTP server returned status %d", resp.StatusCode)
+	}
+	
+	// Parse response
+	var executionResult ExecutionResult
+	if err := json.NewDecoder(resp.Body).Decode(&executionResult); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+	
+	return &executionResult, nil
+}
+
+// ExecutionResult represents the result of command execution
+type ExecutionResult struct {
+	PodName       string `json:"pod_name"`
+	Namespace     string `json:"namespace"`
+	ErrorType     string `json:"error_type"`
+	TotalCommands int    `json:"total_commands"`
+	SuccessCount  int    `json:"success_count"`
+	FailureCount  int    `json:"failure_count"`
+	Status        string `json:"status"`
+	Message       string `json:"message"`
+}
+
+// sendExecutionFeedback sends execution results back to Python service for reflexion
+func (pw *PodWatcher) sendExecutionFeedback(pod *v1.Pod, response *reflexion.ProcessPodErrorResponse, executionResult *ExecutionResult, errorType string) error {
+	log.Printf("🔄 Sending execution feedback for reflexion learning...")
+	
+	// Prepare feedback data
+	feedbackData := map[string]interface{}{
+		"workflow_id":     response.WorkflowID,
+		"pod_name":        pod.Name,
+		"namespace":       pod.Namespace,
+		"error_type":      errorType,
+		"strategy_used":   response.FinalStrategy,
+		"execution_result": map[string]interface{}{
+			"success":         executionResult.Status == "success",
+			"partial_success": executionResult.Status == "partial",
+			"total_commands":  executionResult.TotalCommands,
+			"success_count":   executionResult.SuccessCount,
+			"failure_count":   executionResult.FailureCount,
+			"status":          executionResult.Status,
+		},
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+	
+	// Convert to JSON
+	jsonData, err := json.Marshal(feedbackData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal feedback: %v", err)
+	}
+	
+	// Send to Python service reflexion endpoint
+	pythonURL := "http://localhost:8000/api/v1/reflexion/execution-feedback"
+	resp, err := http.Post(pythonURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to send feedback to Python service: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Python service returned status %d for feedback", resp.StatusCode)
+	}
+	
+	log.Printf("✅ Execution feedback sent for reflexion learning")
+	return nil
 }
