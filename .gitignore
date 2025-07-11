@@ -50,7 +50,6 @@ Thumbs.db
 logs/
 
 # Test files
-test*.bat
 debug*.bat
 test*.json
 reflexion_memory.json
