@@ -111,11 +111,15 @@ func (e *KubectlExecutor) executeCommand(ctx context.Context, command, podName, 
 		ExecutedAt: startTime.Format(time.RFC3339),
 	}
 	
+	// Log command execution
+	log.Printf("🔄 Executing: %s", command)
+	
 	// Handle dry-run mode
 	if e.dryRun {
 		result.Output = fmt.Sprintf("DRY-RUN: Would execute: %s", command)
 		result.Success = true
 		result.Duration = time.Since(startTime).String()
+		log.Printf("🧪 DRY-RUN: %s", command)
 		return result
 	}
 	
@@ -155,8 +159,13 @@ func (e *KubectlExecutor) executeCommand(ctx context.Context, command, podName, 
 	if err != nil {
 		result.Error = err.Error()
 		result.Success = false
+		log.Printf("❌ Command failed: %s | Error: %s", command, err.Error())
 	} else {
 		result.Success = true
+		log.Printf("✅ Command succeeded: %s | Duration: %s", command, result.Duration)
+		if len(result.Output) > 0 && len(result.Output) < 200 {
+			log.Printf("📄 Output: %s", strings.TrimSpace(result.Output))
+		}
 	}
 	
 	return result

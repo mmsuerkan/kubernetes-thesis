@@ -367,14 +367,26 @@ func (pw *PodWatcher) executeCommands(pod *v1.Pod, commands map[string][]string,
 
 // ExecutionResult represents the result of command execution
 type ExecutionResult struct {
-	PodName       string `json:"pod_name"`
-	Namespace     string `json:"namespace"`
-	ErrorType     string `json:"error_type"`
-	TotalCommands int    `json:"total_commands"`
-	SuccessCount  int    `json:"success_count"`
-	FailureCount  int    `json:"failure_count"`
-	Status        string `json:"status"`
-	Message       string `json:"message"`
+	PodName          string                   `json:"pod_name"`
+	Namespace        string                   `json:"namespace"`
+	ErrorType        string                   `json:"error_type"`
+	TotalCommands    int                      `json:"total_commands"`
+	SuccessCount     int                      `json:"success_count"`
+	FailureCount     int                      `json:"failure_count"`
+	Status           string                   `json:"status"`
+	Message          string                   `json:"message"`
+	Commands         []CommandResult          `json:"commands,omitempty"`
+	ExecutedCommands []map[string]interface{} `json:"executed_commands,omitempty"`
+}
+
+// CommandResult represents individual command execution result
+type CommandResult struct {
+	Command    string `json:"command"`
+	Success    bool   `json:"success"`
+	Output     string `json:"output"`
+	Error      string `json:"error"`
+	Duration   string `json:"duration"`
+	ExecutedAt string `json:"executed_at"`
 }
 
 // sendExecutionFeedback sends execution results back to Python service for reflexion
@@ -389,12 +401,14 @@ func (pw *PodWatcher) sendExecutionFeedback(pod *v1.Pod, response *reflexion.Pro
 		"error_type":      errorType,
 		"strategy_used":   response.FinalStrategy,
 		"execution_result": map[string]interface{}{
-			"success":         executionResult.Status == "success",
-			"partial_success": executionResult.Status == "partial",
-			"total_commands":  executionResult.TotalCommands,
-			"success_count":   executionResult.SuccessCount,
-			"failure_count":   executionResult.FailureCount,
-			"status":          executionResult.Status,
+			"success":           executionResult.Status == "success",
+			"partial_success":   executionResult.Status == "partial",
+			"total_commands":    executionResult.TotalCommands,
+			"success_count":     executionResult.SuccessCount,
+			"failure_count":     executionResult.FailureCount,
+			"status":            executionResult.Status,
+			"commands":          executionResult.Commands,
+			"executed_commands": executionResult.Commands, // For backward compatibility
 		},
 		"timestamp": time.Now().Format(time.RFC3339),
 	}

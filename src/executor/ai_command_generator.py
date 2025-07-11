@@ -72,8 +72,20 @@ class AICommandGenerator:
             # Validate command structure
             validated_commands = self._validate_command_structure(commands)
             
-            logger.info("AI commands generated successfully", 
-                       command_count=sum(len(cmds) for cmds in validated_commands.values()))
+            # Log the actual commands that will be executed
+            total_commands = sum(len(cmds) for cmds in validated_commands.values())
+            logger.info("="*80)
+            logger.info("✅ AI COMMANDS GENERATED SUCCESSFULLY")
+            logger.info(f"📊 Total Commands: {total_commands}")
+            logger.info("🔧 COMMANDS TO BE EXECUTED:")
+            
+            for category, cmd_list in validated_commands.items():
+                if cmd_list:
+                    logger.info(f"   📋 {category.upper()}:")
+                    for i, cmd in enumerate(cmd_list, 1):
+                        logger.info(f"      {i}. {cmd}")
+            
+            logger.info("="*80)
             
             return validated_commands
             

@@ -1050,6 +1050,17 @@ async def process_execution_feedback(request: ExecutionFeedbackRequest):
     logger.info(f"   📊 Execution Status: {request.execution_result.get('status')}")
     logger.info(f"   ✅ Success: {request.execution_result.get('success', False)}")
     logger.info(f"   📋 Commands: {request.execution_result.get('success_count', 0)}/{request.execution_result.get('total_commands', 0)} successful")
+    
+    # Log executed commands if available
+    executed_commands = request.execution_result.get('executed_commands', [])
+    if executed_commands:
+        logger.info("🔧 EXECUTED COMMANDS:")
+        for i, cmd_info in enumerate(executed_commands, 1):
+            cmd = cmd_info.get('command', 'Unknown command')
+            status = '✅' if cmd_info.get('success', False) else '❌'
+            duration = cmd_info.get('duration', 'N/A')
+            logger.info(f"   {i}. {status} {cmd} (Duration: {duration})")
+    
     logger.info("="*80)
     
     start_time = datetime.now()
