@@ -47,22 +47,22 @@ K8s AI Auto-Fix Agent, Kubernetes'de çalışan uygulamalarınızda (pod'ların�
 
 ```mermaid
 graph TD
-    A[1. Kubernetes Hata Oluşur] -->|Pod çöker| B[2. Go Servisi Hatayı Yakalar]
-    B -->|2 saniye içinde| C[3. Python AI Servisi Analiz Eder]
-    C -->|GPT-4 Analizi| D{4. Strateji Seçimi}
+    A[1 Kubernetes Hata Oluşur] --> B[2 Go Servisi Hatayı Yakalar]
+    B --> C[3 Python AI Servisi Analiz Eder]
+    C --> D{4 Strateji Seçimi}
     
-    D -->|Yüzde 80 Öğrenilmiş| E[Veritabanından Başarılı Çözüm]
-    D -->|Yüzde 20 Yeni| F[GPT-4 ile Yeni Çözüm]
+    D --> E[Veritabanından Başarılı Çözüm]
+    D --> F[GPT-4 ile Yeni Çözüm]
     
-    E --> G[5. kubectl Komutları Oluştur]
+    E --> G[5 kubectl Komutları Oluştur]
     F --> G
     
-    G --> H[6. Komutları Güvenlik Kontrolü]
-    H -->|Güvenli| I[7. Komutları Çalıştır]
-    I --> J[8. Pod Düzeltildi]
+    G --> H[6 Komutları Güvenlik Kontrolü]
+    H --> I[7 Komutları Çalıştır]
+    I --> J[8 Pod Düzeltildi]
     
-    J --> K[9. Sonucu Öğren]
-    K -->|Başarılı| L[Veritabanına Kaydet]
+    J --> K[9 Sonucu Öğren]
+    K --> L[Veritabanına Kaydet]
     
     style A fill:#ff6b6b
     style J fill:#51cf66
@@ -74,73 +74,26 @@ graph TD
 
 ```mermaid
 graph TB
-    subgraph "Kubernetes Kümesi"
-        K8S_API[Kubernetes API Server]
-        PODS[Podlar]
-        
-        subgraph "Hatalı Pod Örnekleri"
-            IMG_ERR[nginx hatalı tag ImagePullBackOff]
-            CRASH_ERR[app çöküyor CrashLoopBackOff]
-        end
-    end
+    K8S[Kubernetes API] --> WATCHER[Pod Watcher]
+    WATCHER --> ERROR_Q[Hata Kuyruğu]
+    ERROR_Q --> FASTAPI[Python AI Servisi]
     
-    subgraph "Go Servisi Gerçek Zamanlı İzleme"
-        WATCHER[Pod Watcher Her 10sn kontrol]
-        ERROR_Q[Hata Kuyruğu Eşzamanlı işleme]
-        HTTP_SERVER[HTTP Server 8080 port]
-        KUBECTL[kubectl Executor Komut çalıştırıcı]
-    end
+    FASTAPI --> ANALYZE[Hata Analizi]
+    ANALYZE --> STRATEGY[Strateji Seçimi]  
+    STRATEGY --> GPT4[GPT-4 Komut Üretici]
+    GPT4 --> EXECUTOR[kubectl Executor]
+    EXECUTOR --> K8S
     
-    subgraph "Python AI Servisi Akıllı Analiz"
-        FASTAPI[FastAPI Server 8000 port]
-        
-        subgraph "LangGraph Workflow"
-            ANALYZE[Analyze Node Hata Analizi]
-            STRATEGY[Strategy Node Strateji Seçimi]
-            EXECUTE[Execute Node Çözüm Uygulama]
-            OBSERVE[Observe Node Sonuç Gözlemi]
-            REFLECT[Reflect Node Kendini Değerlendirme]
-            LEARN[Learn Node Öğrenme]
-            META[Meta-Reflect Node Üst Düzey Düşünme]
-        end
-        
-        ANALYZER[AI Analyzer Hata Analizi]
-        GPT4[GPT-4 Generator Komut Üretici]
-    end
-    
-    subgraph "Veri Katmanı"
-        SQLITE[(SQLite DB strategies.db)]
-        LOGS[Enhanced Logs Karar Kayıtları]
-    end
-    
-    K8S_API -->|Watch Events| WATCHER
-    WATCHER -->|Hata Tespit| ERROR_Q
-    ERROR_Q -->|HTTP POST| FASTAPI
-    
-    FASTAPI --> ANALYZE
-    ANALYZE --> STRATEGY
-    STRATEGY --> EXECUTE
-    EXECUTE --> OBSERVE
-    OBSERVE --> REFLECT
-    REFLECT --> LEARN
-    LEARN -->|Gerekirse| META
-    
-    ANALYZE --> ANALYZER
-    STRATEGY --> SQLITE
-    EXECUTE --> GPT4
-    
-    GPT4 -->|kubectl komutları| HTTP_SERVER
-    HTTP_SERVER --> KUBECTL
-    KUBECTL -->|Düzeltme| K8S_API
-    
+    STRATEGY --> SQLITE[(Strateji Veritabanı)]
+    EXECUTOR --> OBSERVE[Sonuç Gözlemi]
+    OBSERVE --> REFLECT[Yansıtma]
+    REFLECT --> LEARN[Öğrenme]
     LEARN --> SQLITE
-    REFLECT --> LOGS
     
-    style IMG_ERR fill:#ff6b6b
-    style CRASH_ERR fill:#ff6b6b
     style REFLECT fill:#fab005
     style LEARN fill:#845ef7
-    style META fill:#ff6b6b
+    style GPT4 fill:#ff9500
+    style SQLITE fill:#845ef7
 ```
 
 ## 🧠 LangGraph ve Meta-Cognitive Özellikler
@@ -152,10 +105,10 @@ LangGraph, AI sistemlerinin **düşünce süreçlerini** organize eden bir frame
 
 ```mermaid
 graph LR
-    A[Hata Çözümü] --> B[Gözlem Ne oldu]
-    B --> C[Yansıtma Neden oldu]
-    C --> D[Öğrenme Ne öğrendim]
-    D --> E[Gelişim Nasıl gelişebilirim]
+    A[Hata Çözümü] --> B[Gözlem]
+    B --> C[Yansıtma]
+    C --> D[Öğrenme]
+    D --> E[Gelişim]
     E --> F[Strateji Güncelleme]
     
     style C fill:#fab005
