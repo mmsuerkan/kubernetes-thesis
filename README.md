@@ -47,19 +47,19 @@ K8s AI Auto-Fix Agent, Kubernetes'de çalışan uygulamalarınızda (pod'ların�
 
 ```mermaid
 graph TD
-    A[1. Kubernetes'de Hata Oluşur] -->|Pod çöker| B[2. Go Servisi Hatayı Yakalar]
+    A[1. Kubernetes Hata Oluşur] -->|Pod çöker| B[2. Go Servisi Hatayı Yakalar]
     B -->|2 saniye içinde| C[3. Python AI Servisi Analiz Eder]
     C -->|GPT-4 Analizi| D{4. Strateji Seçimi}
     
-    D -->|%80 Öğrenilmiş| E[Veritabanından<br/>Başarılı Çözüm]
-    D -->|%20 Yeni| F[GPT-4 ile<br/>Yeni Çözüm]
+    D -->|Yüzde 80 Öğrenilmiş| E[Veritabanından Başarılı Çözüm]
+    D -->|Yüzde 20 Yeni| F[GPT-4 ile Yeni Çözüm]
     
     E --> G[5. kubectl Komutları Oluştur]
     F --> G
     
     G --> H[6. Komutları Güvenlik Kontrolü]
     H -->|Güvenli| I[7. Komutları Çalıştır]
-    I --> J[8. Pod Düzeltildi ✅]
+    I --> J[8. Pod Düzeltildi]
     
     J --> K[9. Sonucu Öğren]
     K -->|Başarılı| L[Veritabanına Kaydet]
@@ -76,41 +76,41 @@ graph TD
 graph TB
     subgraph "Kubernetes Kümesi"
         K8S_API[Kubernetes API Server]
-        PODS[Pod'lar]
+        PODS[Podlar]
         
         subgraph "Hatalı Pod Örnekleri"
-            IMG_ERR[nginx:hatalı-tag<br/>ImagePullBackOff]
-            CRASH_ERR[app çöküyor<br/>CrashLoopBackOff]
+            IMG_ERR[nginx hatalı tag ImagePullBackOff]
+            CRASH_ERR[app çöküyor CrashLoopBackOff]
         end
     end
     
-    subgraph "Go Servisi - Gerçek Zamanlı İzleme"
-        WATCHER[Pod Watcher<br/>Her 10sn kontrol]
-        ERROR_Q[Hata Kuyruğu<br/>Eşzamanlı işleme]
-        HTTP_SERVER[HTTP Server<br/>:8080 port]
-        KUBECTL[kubectl Executor<br/>Komut çalıştırıcı]
+    subgraph "Go Servisi Gerçek Zamanlı İzleme"
+        WATCHER[Pod Watcher Her 10sn kontrol]
+        ERROR_Q[Hata Kuyruğu Eşzamanlı işleme]
+        HTTP_SERVER[HTTP Server 8080 port]
+        KUBECTL[kubectl Executor Komut çalıştırıcı]
     end
     
-    subgraph "Python AI Servisi - Akıllı Analiz"
-        FASTAPI[FastAPI Server<br/>:8000 port]
+    subgraph "Python AI Servisi Akıllı Analiz"
+        FASTAPI[FastAPI Server 8000 port]
         
         subgraph "LangGraph Workflow"
-            ANALYZE[Analyze Node<br/>Hata Analizi]
-            STRATEGY[Strategy Node<br/>Strateji Seçimi]
-            EXECUTE[Execute Node<br/>Çözüm Uygulama]
-            OBSERVE[Observe Node<br/>Sonuç Gözlemi]
-            REFLECT[Reflect Node<br/>Kendini Değerlendirme]
-            LEARN[Learn Node<br/>Öğrenme]
-            META[Meta-Reflect Node<br/>Üst Düzey Düşünme]
+            ANALYZE[Analyze Node Hata Analizi]
+            STRATEGY[Strategy Node Strateji Seçimi]
+            EXECUTE[Execute Node Çözüm Uygulama]
+            OBSERVE[Observe Node Sonuç Gözlemi]
+            REFLECT[Reflect Node Kendini Değerlendirme]
+            LEARN[Learn Node Öğrenme]
+            META[Meta-Reflect Node Üst Düzey Düşünme]
         end
         
-        ANALYZER[AI Analyzer<br/>Hata Analizi]
-        GPT4[GPT-4 Generator<br/>Komut Üretici]
+        ANALYZER[AI Analyzer Hata Analizi]
+        GPT4[GPT-4 Generator Komut Üretici]
     end
     
     subgraph "Veri Katmanı"
-        SQLITE[(SQLite DB<br/>strategies.db)]
-        LOGS[Enhanced Logs<br/>Karar Kayıtları]
+        SQLITE[(SQLite DB strategies.db)]
+        LOGS[Enhanced Logs Karar Kayıtları]
     end
     
     K8S_API -->|Watch Events| WATCHER
@@ -152,10 +152,10 @@ LangGraph, AI sistemlerinin **düşünce süreçlerini** organize eden bir frame
 
 ```mermaid
 graph LR
-    A[Hata Çözümü] --> B[Gözlem<br/>Ne oldu?]
-    B --> C[Yansıtma<br/>Neden oldu?]
-    C --> D[Öğrenme<br/>Ne öğrendim?]
-    D --> E[Gelişim<br/>Nasıl gelişebilirim?]
+    A[Hata Çözümü] --> B[Gözlem Ne oldu]
+    B --> C[Yansıtma Neden oldu]
+    C --> D[Öğrenme Ne öğrendim]
+    D --> E[Gelişim Nasıl gelişebilirim]
     E --> F[Strateji Güncelleme]
     
     style C fill:#fab005
