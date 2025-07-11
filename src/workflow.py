@@ -2,10 +2,23 @@
 Reflexive LangGraph Workflow - Enhanced K8s error resolution with self-learning
 """
 import asyncio
+import os
 from datetime import datetime
 from typing import Dict, Any, Literal
 import structlog
 from langgraph.graph import StateGraph, END
+
+# LangSmith Integration
+from langsmith import traceable
+from langchain_core.tracers import LangChainTracer
+
+# Initialize LangSmith tracing
+os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+os.environ.setdefault("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+if "LANGCHAIN_API_KEY" in os.environ:
+    langsmith_tracer = LangChainTracer()
+else:
+    langsmith_tracer = None
 
 # Simple memory store (MemorySaver might not be available in all versions)
 try:
@@ -133,6 +146,7 @@ class ReflexiveK8sWorkflow:
     
     # === Core Workflow Nodes ===
     
+    @traceable(name="analyze_error_node")
     async def _analyze_error_node(self, state: ReflexiveK8sState) -> ReflexiveK8sState:
         """Enhanced error analysis with reflexive capabilities"""
         logger.info("Starting reflexive error analysis", pod_name=state["pod_name"])
@@ -204,6 +218,7 @@ class ReflexiveK8sWorkflow:
         
         return state
     
+    @traceable(name="strategy_selection_node")
     async def _intelligent_strategy_selection_node(self, state: ReflexiveK8sState) -> ReflexiveK8sState:
         """Intelligent strategy selection based on learned knowledge"""
         logger.info("🧠 STRATEGY SELECTION START", pod_name=state["pod_name"], error_type=state["error_type"])
@@ -397,6 +412,7 @@ class ReflexiveK8sWorkflow:
             "selection_reason": "no_strategy_available"
         })
     
+    @traceable(name="decide_strategy_node")
     async def _decide_strategy_node(self, state: ReflexiveK8sState) -> ReflexiveK8sState:
         """Enhanced strategy decision with reflexive insights"""
         logger.info("Making strategy decision", pod_name=state["pod_name"])
@@ -443,6 +459,7 @@ class ReflexiveK8sWorkflow:
             
         return detailed_reasoning
     
+    @traceable(name="execute_fix_node")
     async def _execute_fix_node(self, state: ReflexiveK8sState) -> ReflexiveK8sState:
         """Execute the selected strategy"""
         logger.info("Executing fix strategy", pod_name=state["pod_name"])
@@ -676,6 +693,7 @@ class ReflexiveK8sWorkflow:
     
     # === Public Interface ===
     
+    @traceable(name="k8s_reflexion_workflow")
     async def process_pod_error(self, 
                               pod_name: str,
                               namespace: str, 

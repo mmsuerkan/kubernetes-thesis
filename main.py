@@ -24,6 +24,9 @@ from src.memory.episodic_memory import EpisodicMemoryManager
 from src.memory.performance_tracker import PerformanceTracker
 from src.executor.ai_command_generator import AICommandGenerator
 
+# LangSmith Integration
+from langsmith import traceable
+
 # Configure logging
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -254,6 +257,7 @@ async def process_pod_error(request: PodErrorRequest):
 
 # NEW: Endpoint for Go service with real K8s data
 @app.post("/api/v1/reflexion/process-with-k8s-data", response_model=ReflexionResponse)
+@traceable(name="process_pod_error_with_real_data")
 async def process_pod_error_with_real_data(request: GoServiceErrorRequest):
     """
     Process a pod error with real K8s data from Go service
