@@ -1,0 +1,78 @@
+# K8s Reflexion Service Configuration
+
+service:
+  name: "k8s-reflexion-service"
+  version: "1.0.0"
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+
+# OpenAI Configuration
+openai:
+  model: "gpt-4-turbo-preview"
+  max_tokens: 2000
+  temperature: 0.1
+  api_key_env: "OPENAI_API_KEY"
+
+# Go Service Integration
+go_service:
+  url: "http://localhost:8080"
+  timeout: 30
+  health_check_interval: 60
+
+# Reflexion Configuration
+reflexion:
+  reflection_depth: "medium"  # shallow, medium, deep
+  max_reflection_cycles: 5
+  strategy_confidence_threshold: 0.7
+  pattern_detection_threshold: 3
+  learning_velocity_window: 10
+
+# Workflow Configuration
+workflow:
+  max_retry_count: 3
+  execution_timeout: 120
+  checkpointing_enabled: true
+  state_persistence_path: "./reflexion_memory.json"
+
+# Performance Settings
+performance:
+  max_concurrent_workflows: 10
+  background_task_timeout: 300
+  memory_cleanup_interval: 3600
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "json"
+  file_path: "./logs/reflexion.log"
+  max_file_size: "10MB"
+  backup_count: 5
+
+# Security Settings
+security:
+  cors_origins: ["*"]
+  api_key_required: false
+  rate_limiting:
+    enabled: false
+    requests_per_minute: 60
+
+# Monitoring & Metrics
+monitoring:
+  prometheus_enabled: false
+  metrics_endpoint: "/metrics"
+  health_check_endpoint: "/health"
+
+# Knowledge Base Settings
+knowledge_base:
+  strategy_database_size_limit: 1000
+  episodic_memory_size_limit: 5000
+  automatic_cleanup_enabled: true
+  cleanup_threshold_days: 30
+
+# Development Settings
+development:
+  mock_go_service: false
+  simulate_errors: false
+  debug_endpoints_enabled: true
+  reflection_simulation_enabled: true
