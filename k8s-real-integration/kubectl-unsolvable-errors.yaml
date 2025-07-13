@@ -1,0 +1,142 @@
+# kubectl ile ÇÖZÜLEMEYEN Kubernetes Hataları
+# Bu hatalar cluster-level değişiklik gerektirir
+
+---
+# 1. PodPending - Insufficient Resources ❌
+# Çözüm: Cluster'a node ekleme gerekir
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsolvable-resources
+  labels:
+    solvable: "false"
+    reason: "cluster-resources"
+spec:
+  containers:
+  - name: resource-hungry
+    image: nginx
+    resources:
+      requests:
+        memory: "100Gi"  # Cluster'da yok
+        cpu: "50"
+  restartPolicy: Never
+
+---
+# 2. PodPending - Node Selector ❌
+# Çözüm: Node labelling gerekir
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsolvable-selector
+  labels:
+    solvable: "false"
+    reason: "node-labels"
+spec:
+  nodeSelector:
+    special-hardware: "gpu"
+  containers:
+  - name: gpu-app
+    image: nginx
+  restartPolicy: Never
+
+---
+# 3. CreateContainerConfigError - Missing Volume ❌
+# Çözüm: PersistentVolume oluşturma gerekir
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsolvable-volume
+  labels:
+    solvable: "false"
+    reason: "missing-volume"
+spec:
+  containers:
+  - name: volume-app
+    image: nginx
+    volumeMounts:
+    - name: data-volume
+      mountPath: /data
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: nonexistent-pvc
+  restartPolicy: Never
+
+---
+# 4. CreateContainerConfigError - Missing Secret ❌
+# Çözüm: Secret oluşturma gerekir
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsolvable-secret
+  labels:
+    solvable: "false"
+    reason: "missing-secret"
+spec:
+  containers:
+  - name: secret-app
+    image: nginx
+    env:
+    - name: PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: nonexistent-secret
+          key: password
+  restartPolicy: Never
+
+---
+# 5. CreateContainerConfigError - Missing ConfigMap ❌
+# Çözüm: ConfigMap oluşturma gerekir
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsolvable-configmap
+  labels:
+    solvable: "false"
+    reason: "missing-configmap"
+spec:
+  containers:
+  - name: config-app
+    image: nginx
+    env:
+    - name: CONFIG_VALUE
+      valueFrom:
+        configMapKeyRef:
+          name: nonexistent-configmap
+          key: config
+  restartPolicy: Never
+
+---
+# 6. PodPending - Taints/Tolerations ❌
+# Çözüm: Node taint kaldırma gerekir
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsolvable-taints
+  labels:
+    solvable: "false"
+    reason: "node-taints"
+spec:
+  containers:
+  - name: taint-app
+    image: nginx
+  # Node'lar tainted, toleration yok
+  restartPolicy: Never
+
+---
+# 7. Wrong Working Directory ❌
+# Çözüm: kubectl run workingDir set edemez
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsolvable-workdir
+  labels:
+    solvable: "false"
+    reason: "workdir-limitation"
+spec:
+  containers:
+  - name: wrong-workdir
+    image: busybox
+    workingDir: "/nonexistent/directory"
+    command: ["ls"]
+  restartPolicy: Never

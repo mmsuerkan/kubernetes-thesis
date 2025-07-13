@@ -1,0 +1,116 @@
+# K8s Reflexion System Test Scenarios - Windows Compatible
+# Bu dosyayı Windows'ta kubectl apply -f ile çalıştırabilirsin
+
+---
+# Senaryo 1: ImagePullBackOff - Hatalı image tag
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-image-error
+  namespace: default
+  labels:
+    test-type: image-error
+    scenario: invalid-tag
+spec:
+  containers:
+  - name: webapp
+    image: nginx:bu-tag-yok-hiclere  # ❌ Bu tag mevcut değil
+    ports:
+    - containerPort: 80
+  restartPolicy: Never
+
+---
+# Senaryo 2: OOMKilled - Memory limit aşımı  
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-oom-killer
+  namespace: default
+  labels:
+    test-type: memory-limit
+    scenario: oom-killed
+spec:
+  containers:
+  - name: memory-hog
+    image: polinux/stress
+    resources:
+      limits:
+        memory: "32Mi"  # Çok düşük limit
+        cpu: "0.1"
+      requests:
+        memory: "8Mi"
+        cpu: "0.05"
+    command: ["stress"]
+    args:
+    - "--vm"
+    - "1" 
+    - "--vm-bytes"
+    - "64M"  # Limitten fazla memory kullanacak
+    - "--timeout"
+    - "60s"
+  restartPolicy: Never
+
+---
+# Senaryo 3: CrashLoopBackOff - Uygulama sürekli çöküyor
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-crash-loop
+  namespace: default
+  labels:
+    test-type: crash-loop
+    scenario: exit-code-1
+spec:
+  containers:
+  - name: crasher
+    image: busybox
+    command: ["sh"]
+    args:
+    - "-c"
+    - |
+      echo "Uygulama başladı..."
+      sleep 5
+      echo "Kritik hata oluştu!"
+      exit 1  # ❌ Hata kodu ile çık
+  restartPolicy: Always  # Sürekli yeniden başlat → CrashLoopBackOff
+
+---
+# Senaryo 4: InvalidImageName - Geçersiz image adı
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-invalid-image
+  namespace: default
+  labels:
+    test-type: invalid-image
+    scenario: malformed-name
+spec:
+  containers:
+  - name: broken-app
+    image: "INVALID/IMAGE/NAME/WITH/CAPS"  # ❌ Geçersiz image adı
+    ports:
+    - containerPort: 8080
+  restartPolicy: Never
+
+---
+# Senaryo 5: Resource Request Çakışması
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-resource-conflict
+  namespace: default
+  labels:
+    test-type: resource-conflict
+    scenario: impossible-requests
+spec:
+  containers:
+  - name: resource-hungry
+    image: nginx
+    resources:
+      limits:
+        memory: "100Mi"
+        cpu: "0.1"
+      requests:
+        memory: "200Mi"  # ❌ Request > Limit
+        cpu: "0.2"       # ❌ Request > Limit
+  restartPolicy: Never

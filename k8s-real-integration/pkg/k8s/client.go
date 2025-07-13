@@ -242,6 +242,13 @@ func (c *Client) GetPodErrorType(pod *v1.Pod) string {
 			}
 		}
 		if containerStatus.State.Terminated != nil {
+			// First check the Reason field - it's more reliable than exit code
+			reason := containerStatus.State.Terminated.Reason
+			if reason == "OOMKilled" {
+				return "OOMKilled"
+			}
+			
+			// Then check exit code as fallback
 			exitCode := containerStatus.State.Terminated.ExitCode
 			switch exitCode {
 			case 1:

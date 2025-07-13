@@ -1,0 +1,29 @@
+# Aggressive OOMKilled Test - Guaranteed Memory Failure
+apiVersion: v1
+kind: Pod
+metadata:
+  name: super-oom-test
+  namespace: default
+  labels:
+    test-type: guaranteed-oom
+    scenario: extreme-memory
+spec:
+  containers:
+  - name: memory-destroyer
+    image: polinux/stress
+    resources:
+      limits:
+        memory: "10Mi"  # Çok çok düşük limit
+        cpu: "100m"
+      requests:
+        memory: "5Mi"
+        cpu: "50m"
+    command: ["stress"]
+    args:
+    - "--vm"
+    - "1"
+    - "--vm-bytes"
+    - "100M"  # 100MB >> 10Mi → Kesin OOMKilled
+    - "--timeout"
+    - "10s"  # Kısa süre
+  restartPolicy: Never

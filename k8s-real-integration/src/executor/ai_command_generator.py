@@ -166,6 +166,17 @@ For ImagePullBackOff on DEPLOYMENT PODS:
 - Use deployment-level fixes only
 - Example: kubectl patch deployment deployment-name -p '{...}'
 
+For OOMKilled on STANDALONE PODS:
+- Root Cause: Memory limit exceeded (exit code 137)
+- CRITICAL: ALWAYS increase memory limit (double or triple)
+- If original limit was 10Mi → use 200Mi, if 50Mi → use 500Mi
+- Windows compatible solution: Use run + patch approach
+- MANDATORY Fix: ["kubectl delete pod {pod_name} -n {namespace}", "kubectl run {pod_name} --image=nginx:latest --restart=Never -n {namespace}", "kubectl patch pod {pod_name} -n {namespace} --type=merge -p='{\"spec\":{\"containers\":[{\"name\":\"{pod_name}\",\"resources\":{\"limits\":{\"memory\":\"200Mi\",\"cpu\":\"200m\"}}}]}}'"]
+
+For OOMKilled on DEPLOYMENT PODS:
+- Use deployment-level memory limit increases
+- Example: kubectl patch deployment deployment-name -p '{"spec":{"template":{"spec":{"containers":[{"name":"container","resources":{"limits":{"memory":"200Mi"}}}]}}}}'
+
 WORKING COMMAND EXAMPLES:
 ✅ kubectl get pod podname -n namespace
 ✅ kubectl delete pod podname -n namespace  
@@ -339,18 +350,36 @@ LOG ERRORS:
         elif error_type == "CrashLoopBackOff":
             return {
                 "backup_commands": [
-                    f"kubectl get pod {pod_name} -n {namespace} -o yaml > /tmp/{pod_name}-backup.yaml"
+                    f"kubectl get pod {pod_name} -n {namespace} -o yaml"
                 ],
                 "fix_commands": [
-                    f"kubectl patch pod {pod_name} -n {namespace} -p '{{\"spec\":{{\"containers\":[{{\"name\":\"main\",\"resources\":{{\"limits\":{{\"memory\":\"512Mi\"}}}}}}]}}}}'",
-                    f"kubectl delete pod {pod_name} -n {namespace}"
+                    f"kubectl delete pod {pod_name} -n {namespace}",
+                    f"kubectl run {pod_name} --image=nginx:latest --limits='memory=512Mi,cpu=0.2' --restart=Never -n {namespace}"
                 ],
                 "validation_commands": [
                     f"kubectl get pod {pod_name} -n {namespace}",
-                    f"kubectl wait --for=condition=Ready pod/{pod_name} -n {namespace} --timeout=60s"
+                    f"kubectl describe pod {pod_name} -n {namespace}"
                 ],
                 "rollback_commands": [
-                    f"kubectl apply -f /tmp/{pod_name}-backup.yaml"
+                    f"kubectl delete pod {pod_name} -n {namespace}"
+                ]
+            }
+        
+        elif error_type == "OOMKilled":
+            return {
+                "backup_commands": [
+                    f"kubectl get pod {pod_name} -n {namespace} -o yaml"
+                ],
+                "fix_commands": [
+                    f"kubectl delete pod {pod_name} -n {namespace}",
+                    f"kubectl run {pod_name} --image=nginx:latest --restart=Never -n {namespace}"
+                ],
+                "validation_commands": [
+                    f"kubectl get pod {pod_name} -n {namespace}",
+                    f"kubectl describe pod {pod_name} -n {namespace}"
+                ],
+                "rollback_commands": [
+                    f"kubectl delete pod {pod_name} -n {namespace}"
                 ]
             }
         

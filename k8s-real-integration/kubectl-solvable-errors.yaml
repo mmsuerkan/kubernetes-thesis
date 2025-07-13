@@ -1,0 +1,119 @@
+# kubectl Komutlarıyla Çözülebilir Kubernetes Hataları
+# Bu hatalar kubectl delete + kubectl run ile düzeltilebilir
+
+---
+# 1. ImagePullBackOff - kubectl ile çözülebilir ✅
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fixable-imagepull
+  labels:
+    solvable: "true"
+    solution: "image-replacement"
+spec:
+  containers:
+  - name: broken-image
+    image: nginx:nonexistent-tag-123
+  restartPolicy: Never
+
+---
+# 2. ErrImagePull - kubectl ile çözülebilir ✅
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fixable-errimage
+  labels:
+    solvable: "true"
+    solution: "image-replacement"
+spec:
+  containers:
+  - name: private-image
+    image: private-registry.com/missing/app:latest
+  restartPolicy: Never
+
+---
+# 3. InvalidImageName - kubectl ile çözülebilir ✅
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fixable-invalidname
+  labels:
+    solvable: "true"
+    solution: "image-replacement"
+spec:
+  containers:
+  - name: invalid-name
+    image: "INVALID@IMAGE#NAME"
+  restartPolicy: Never
+
+---
+# 4. CrashLoopBackOff - kubectl ile çözülebilir ✅
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fixable-crashloop
+  labels:
+    solvable: "true"
+    solution: "image-replacement"
+spec:
+  containers:
+  - name: crashing-app
+    image: busybox
+    command: ["sh", "-c", "echo 'Crashing...'; exit 1"]
+  restartPolicy: Always
+
+---
+# 5. OOMKilled - kubectl ile kısmen çözülebilir ⚠️
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fixable-oom
+  labels:
+    solvable: "partial"
+    solution: "image-replacement"
+spec:
+  containers:
+  - name: memory-bomb
+    image: polinux/stress
+    resources:
+      limits:
+        memory: "10Mi"
+    command: ["stress"]
+    args: ["--vm", "1", "--vm-bytes", "50M"]
+  restartPolicy: Never
+
+---
+# 6. Wrong Command/Args - kubectl ile çözülebilir ✅
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fixable-wrongcmd
+  labels:
+    solvable: "true"
+    solution: "command-fix"
+spec:
+  containers:
+  - name: wrong-command
+    image: nginx
+    command: ["/nonexistent/binary"]
+  restartPolicy: Never
+
+
+---
+# 7. Wrong Environment Variables - kubectl ile çözülebilir ✅
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fixable-env
+  labels:
+    solvable: "true"
+    solution: "env-fix"
+spec:
+  containers:
+  - name: bad-env
+    image: busybox
+    env:
+    - name: REQUIRED_CONFIG
+      value: "invalid-value"
+    command: ["sh", "-c", "echo $REQUIRED_CONFIG; exit 1"]
+  restartPolicy: Never

@@ -1,0 +1,29 @@
+# OOMKilled Test - Single Scenario Focus
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-test-focused
+  namespace: default
+  labels:
+    test-type: memory-killer
+    scenario: oom-only
+spec:
+  containers:
+  - name: memory-bomb
+    image: polinux/stress
+    resources:
+      limits:
+        memory: "20Mi"  # Çok düşük limit - kesin OOM
+        cpu: "100m"
+      requests:
+        memory: "5Mi"
+        cpu: "50m"
+    command: ["stress"]
+    args:
+    - "--vm"
+    - "1"
+    - "--vm-bytes" 
+    - "50M"  # 50MB > 20Mi limit → kesin OOMKilled
+    - "--timeout"
+    - "30s"
+  restartPolicy: Never
