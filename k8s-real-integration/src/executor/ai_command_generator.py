@@ -148,42 +148,48 @@ CRITICAL RULES FOR WINDOWS COMPATIBILITY:
 2. NEVER use shell redirections (>) - they fail on Windows kubectl execution  
 3. Use only direct kubectl commands without shell operators
 
+CRITICAL POD TYPE DETECTION:
+- STANDALONE PODS: Simple names like "test-pod", "nginx-app", "my-service"
+  → Use ONLY: kubectl delete pod + kubectl run
+- DEPLOYMENT PODS: Names with hash suffixes like "nginx-deployment-abc123-xyz789"
+  → Use ONLY: kubectl patch deployment or kubectl scale
+
 ERROR-SPECIFIC STRATEGIES:
 
-For ImagePullBackOff:
+For ImagePullBackOff on STANDALONE PODS:
 - Root Cause: Invalid/nonexistent image tag
-- NEVER use "kubectl set image" for pods with --restart=Never (they are immutable)
+- NEVER use kubectl patch deployment (will fail with "not found")
 - ALWAYS use delete+recreate strategy
-- Working Fix: ["kubectl delete pod {pod_name} -n {namespace}", "kubectl run {pod_name} --image=nginx:latest --restart=Never -n {namespace}"]
+- MANDATORY Fix: ["kubectl delete pod {pod_name} -n {namespace}", "kubectl run {pod_name} --image=nginx:latest --restart=Never -n {namespace}"]
 
-For CrashLoopBackOff:
-- Root Cause: Container exits with error
-- If pod is managed by Deployment: Use "kubectl patch deployment" or "kubectl scale" 
-- For standalone pods: Use kubectl delete+recreate
-- NEVER create new pods with same name as deployment-managed pods
+For ImagePullBackOff on DEPLOYMENT PODS:
+- Use deployment-level fixes only
+- Example: kubectl patch deployment deployment-name -p '{...}'
 
 WORKING COMMAND EXAMPLES:
 ✅ kubectl get pod podname -n namespace
 ✅ kubectl delete pod podname -n namespace  
-✅ kubectl run newpodname --image=nginx:latest --restart=Never -n namespace
+✅ kubectl run podname --image=nginx:latest --restart=Never -n namespace
 ✅ kubectl scale deployment deploymentname --replicas=0 -n namespace
-✅ kubectl scale deployment deploymentname --replicas=1 -n namespace
-✅ kubectl describe pod podname -n namespace
+❌ kubectl patch deployment <deployment_name> (placeholder names fail)
 ❌ kubectl describe pod podname | grep "Image"  (pipe fails)
-❌ kubectl get pod podname -o yaml > backup.yaml  (redirection fails)
-❌ kubectl run existing-pod-name (pod already exists error)
 
-Output format (use ONLY working commands):
+MANDATORY OUTPUT FORMAT:
 {
     "backup_commands": ["kubectl get pod {pod_name} -n {namespace} -o yaml"],
-    "fix_commands": ["simple_working_fix_command"],
+    "fix_commands": ["kubectl delete pod {pod_name} -n {namespace}", "kubectl run {pod_name} --image=nginx:latest --restart=Never -n {namespace}"],
     "validation_commands": ["kubectl get pod {pod_name} -n {namespace}", "kubectl describe pod {pod_name} -n {namespace}"],
     "rollback_commands": ["kubectl delete pod {pod_name} -n {namespace}"]
 }"""
 
         # Check if this is a standalone pod or deployment-managed pod
         pod_name = context['pod_name']
-        is_deployment_pod = '-' in pod_name and len(pod_name.split('-')) >= 3
+        # Better detection: deployment pods have hash-like suffixes (e.g., nginx-deployment-abc123-xyz789)
+        is_deployment_pod = (
+            '-' in pod_name and 
+            len(pod_name.split('-')) >= 3 and
+            any(len(part) >= 5 and part.replace('-', '').isalnum() for part in pod_name.split('-')[-2:])
+        )
         
         deployment_warning = ""
         if is_deployment_pod:
@@ -194,8 +200,9 @@ Use deployment-level fixes: kubectl scale, kubectl patch deployment, etc.
 """
         else:
             deployment_warning = """
-IMPORTANT: This appears to be a standalone Pod (simple name without deployment hash).
-Use pod-level fixes: kubectl delete pod, kubectl run, etc.
+IMPORTANT: This appears to be a STANDALONE Pod (simple name without deployment hash).
+Use pod-level fixes ONLY: kubectl delete pod, kubectl run, etc.
+NEVER attempt to patch deployments for standalone pods!
 """
 
         # Add lessons learned from reflexion to the prompt
@@ -217,6 +224,12 @@ POD PHASE: {context['pod_phase']}
 
 {deployment_warning}
 
+🚨 CRITICAL INSTRUCTION FOR POD: {context['pod_name']}
+- This is a STANDALONE POD (no deployment suffix)
+- You MUST use pod-level commands ONLY
+- NEVER use "kubectl patch deployment" - it will fail
+- MANDATORY commands: "kubectl delete pod" + "kubectl run"
+
 STRATEGY: {context['strategy']['type']} (confidence: {context['strategy'].get('confidence', 0.0)})
 
 CONTAINERS:
@@ -229,8 +242,9 @@ LOG ERRORS:
 {json.dumps(context['log_errors'], indent=2)}
 {lessons_section}
 
-Generate safe, effective kubectl commands following the specified JSON format.
-🎯 IMPORTANT: If lessons learned are provided, incorporate those insights into your command selection."""
+🎯 MANDATORY: Use the exact format from MANDATORY OUTPUT FORMAT in system prompt.
+🎯 FORBIDDEN: Any kubectl patch deployment commands for standalone pods.
+🎯 REQUIRED: kubectl delete pod + kubectl run commands for ImagePullBackOff."""
 
         messages = [
             SystemMessage(content=system_prompt),

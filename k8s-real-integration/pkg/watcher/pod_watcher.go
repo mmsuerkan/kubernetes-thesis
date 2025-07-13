@@ -118,29 +118,49 @@ func (pw *PodWatcher) scanPods() error {
 
 // shouldProcessPod determines if a pod should be processed
 func (pw *PodWatcher) shouldProcessPod(pod *v1.Pod) bool {
-	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+	// Use UID for unique pod identification (handles recreated pods with same name)
+	podKey := fmt.Sprintf("%s/%s/%s", pod.Namespace, pod.Name, pod.UID)
+
+	// Debug: Log pod status
+	log.Printf("🔍 DEBUG: Pod %s (UID: %s) - Phase: %s, ContainerStatuses: %d", 
+		pod.Name, string(pod.UID)[:8], pod.Status.Phase, len(pod.Status.ContainerStatuses))
+	
+	for i, containerStatus := range pod.Status.ContainerStatuses {
+		log.Printf("🔍 DEBUG: Container %d - Ready: %t, State: %+v", 
+			i, containerStatus.Ready, containerStatus.State)
+		if containerStatus.State.Waiting != nil {
+			log.Printf("🔍 DEBUG: Waiting reason: %s, message: %s", 
+				containerStatus.State.Waiting.Reason, containerStatus.State.Waiting.Message)
+		}
+	}
 
 	// Check if pod has failed
-	if !pw.k8sClient.IsPodFailed(pod) {
+	isFailed := pw.k8sClient.IsPodFailed(pod)
+	log.Printf("🔍 DEBUG: Pod %s IsPodFailed result: %t", pod.Name, isFailed)
+	
+	if !isFailed {
 		return false
 	}
 
-	// Check if we've already processed this pod
+	// Check if we've already processed this specific pod instance (by UID)
 	pw.mutex.RLock()
 	processed := pw.processedPods[podKey]
 	pw.mutex.RUnlock()
 
+	log.Printf("🔍 DEBUG: Pod %s (UID: %s) already processed: %t", pod.Name, string(pod.UID)[:8], processed)
 	return !processed
 }
 
 // processPod processes a failed pod
 func (pw *PodWatcher) processPod(pod *v1.Pod) {
-	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+	// Use UID for unique identification (same as shouldProcessPod)
+	podKey := fmt.Sprintf("%s/%s/%s", pod.Namespace, pod.Name, pod.UID)
 	errorType := pw.k8sClient.GetPodErrorType(pod)
 
-	log.Printf("🚨 Processing failed pod: %s, Error: %s", podKey, errorType)
+	log.Printf("🚨 Processing failed pod: %s/%s (UID: %s), Error: %s", 
+		pod.Namespace, pod.Name, string(pod.UID)[:8], errorType)
 
-	// Mark as processed
+	// Mark as processed (by UID)
 	pw.mutex.Lock()
 	pw.processedPods[podKey] = true
 	pw.mutex.Unlock()

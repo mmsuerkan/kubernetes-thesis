@@ -34,6 +34,8 @@ from .nodes.learn import LearningEngine
 from .memory.strategy_db import StrategyDatabase, Strategy
 from .memory.episodic_memory import EpisodicMemoryManager, EpisodicMemory
 from .memory.performance_tracker import PerformanceTracker
+from .executor.real_kubectl_executor import RealKubectlExecutor
+from .executor.ai_command_generator import AICommandGenerator
 
 logger = structlog.get_logger()
 logger.info("🚀 Workflow module loaded - Enhanced logging enabled")
@@ -45,7 +47,8 @@ class ReflexiveK8sWorkflow:
     def __init__(self, 
                  openai_api_key: str,
                  go_service_url: str = "",
-                 reflection_depth: str = "medium"):
+                 reflection_depth: str = "medium",
+                 kubectl_dry_run: bool = False):
         
         # Initialize engines
         self.observation_engine = ObservationEngine("")
@@ -59,6 +62,19 @@ class ReflexiveK8sWorkflow:
         self.strategy_db = StrategyDatabase()
         self.episodic_memory = EpisodicMemoryManager()
         self.performance_tracker = PerformanceTracker()
+        
+        # Initialize real kubectl executor
+        self.kubectl_executor = RealKubectlExecutor(
+            dry_run=kubectl_dry_run,
+            timeout=120,
+            max_retries=3
+        )
+        
+        # Initialize AI command generator
+        self.ai_command_generator = AICommandGenerator(
+            openai_api_key=openai_api_key,
+            model="gpt-3.5-turbo"
+        )
         
         # Build workflow
         self.workflow = self._build_reflexive_workflow()
@@ -474,45 +490,92 @@ class ReflexiveK8sWorkflow:
     
     @traceable(name="execute_fix_node")
     async def _execute_fix_node(self, state: ReflexiveK8sState) -> ReflexiveK8sState:
-        """Execute the selected strategy"""
-        logger.info("Executing fix strategy", pod_name=state["pod_name"])
+        """Execute the selected strategy with REAL kubectl commands"""
+        logger.info("🚀 REAL KUBECTL EXECUTION START", pod_name=state["pod_name"])
         
         try:
-            # Simulate fix execution with realistic timing
-            import random
-            import time
+            # Get strategy from state
+            strategy = state.get("current_strategy", {})
+            error_type = state["error_type"]
+            pod_name = state["pod_name"]
+            namespace = state["namespace"]
             
-            # Simulate realistic execution time based on strategy type
-            strategy_type = state.get("current_strategy", {}).get("type", "default")
-            
-            # Strategy performance based on type and confidence
-            strategy_confidence = state.get("current_strategy", {}).get("confidence", 0.5)
-            
-            if "learned" in strategy_type or "adaptive" in strategy_type or "high_confidence_persistent" in state.get("current_strategy", {}).get("selection_reason", ""):
-                # Learned strategies: Better performance as confidence increases
-                base_time = random.uniform(10.0, 25.0)  # Faster execution
-                success_rate = min(0.95, 0.6 + (strategy_confidence * 0.4))  # Confidence-based success
-                logger.info(f"Using learned strategy with confidence-based success rate: {success_rate:.2f}")
+            # Prepare real K8s data for AI command generation
+            real_k8s_data = state.get("real_k8s_data", {})
+            if not real_k8s_data:
+                # Create minimal context if no real data
+                real_k8s_data = {
+                    "pod": {"metadata": {"name": pod_name, "namespace": namespace}},
+                    "events": [],
+                    "logs": [],
+                    "lessons_learned": state.get("lessons_learned", [])
+                }
             else:
-                # Default strategies: Consistent but slower
-                base_time = random.uniform(30.0, 60.0)
-                success_rate = 0.75  # Moderate success rate
+                # Add lessons learned to real data
+                real_k8s_data["lessons_learned"] = state.get("lessons_learned", [])
             
-            success = random.random() < success_rate
-            execution_time = base_time + (random.uniform(5.0, 20.0) if not success else 0)
+            logger.info("🤖 GENERATING KUBECTL COMMANDS WITH AI")
             
+            # Generate kubectl commands using AI
+            kubectl_commands = await self.ai_command_generator.generate_kubectl_commands(
+                error_type=error_type,
+                pod_name=pod_name,
+                namespace=namespace,
+                strategy=strategy,
+                real_k8s_data=real_k8s_data
+            )
+            
+            logger.info(f"✅ AI GENERATED {sum(len(cmds) for cmds in kubectl_commands.values())} COMMANDS")
+            
+            # Execute the kubectl commands with real executor
+            logger.info("⚡ EXECUTING REAL KUBECTL COMMANDS")
+            execution_start = datetime.now()
+            
+            execution_results = await self.kubectl_executor.execute_kubectl_commands_dict(kubectl_commands)
+            
+            execution_time = (datetime.now() - execution_start).total_seconds()
+            
+            # Analyze execution results
+            analysis = self.kubectl_executor.analyze_execution_results(execution_results)
+            
+            # Determine overall success
+            success = analysis["overall_success"]
+            fix_success = analysis["fix_success"]
+            
+            logger.info("=" * 80)
+            logger.info("📊 REAL KUBECTL EXECUTION SUMMARY:")
+            logger.info(f"   🎯 Overall Success: {success}")
+            logger.info(f"   🔧 Fix Success: {fix_success}")
+            logger.info(f"   📋 Commands Executed: {analysis['successful_commands']}/{analysis['total_commands']}")
+            logger.info(f"   ⏱️ Total Time: {execution_time:.2f}s")
+            logger.info(f"   📈 Success Rate: {analysis['success_rate']:.1%}")
+            if analysis['errors']:
+                logger.info(f"   ❌ Errors: {len(analysis['errors'])}")
+                for error in analysis['errors'][:3]:  # Show first 3 errors
+                    logger.info(f"      - {error['command']}: {error['error'][:100]}")
+            logger.info("=" * 80)
+            
+            # Store detailed execution results in state
             state["execution_result"] = {
                 "success": success,
-                "message": f"Mock execution of {state.get('current_strategy', {}).get('type', 'default')} strategy",
+                "fix_success": fix_success,
                 "execution_time": execution_time,
-                "details": f"Simulated fix for {state['error_type']} on pod {state['pod_name']}"
+                "message": f"Real kubectl execution: {analysis['successful_commands']}/{analysis['total_commands']} commands successful",
+                "details": f"Real fix execution for {error_type} on pod {pod_name}",
+                "kubectl_commands": kubectl_commands,
+                "execution_results": execution_results,
+                "analysis": analysis,
+                "timestamp": datetime.now().isoformat()
             }
+            
             state["success"] = success
             
-            # Record performance in persistent storage
+            # Record performance in persistent storage WITH REAL RESULTS
             strategy = state.get("current_strategy", {})
             if strategy.get("id"):
                 confidence_before = strategy.get("confidence", 0.5)
+                
+                # Use REAL execution results for performance tracking
                 new_confidence = self.performance_tracker.record_performance(
                     strategy_id=strategy["id"],
                     success=success,
@@ -521,13 +584,30 @@ class ReflexiveK8sWorkflow:
                     context={
                         "namespace": state["namespace"],
                         "error_type": state["error_type"],
-                        "pod_name": state["pod_name"]
+                        "pod_name": state["pod_name"],
+                        "real_execution": True,  # Mark as real execution
+                        "commands_executed": analysis['total_commands'],
+                        "success_rate": analysis['success_rate']
                     }
                 )
                 
-                # Update strategy confidence
+                # Update strategy confidence with real results
                 strategy["confidence"] = new_confidence
                 state["current_strategy"] = strategy
+                
+                # Create detailed feedback from real execution
+                feedback_details = [
+                    f"Real kubectl execution: {analysis['successful_commands']}/{analysis['total_commands']} commands successful",
+                    f"Overall success: {success}, Fix success: {fix_success}",
+                    f"Execution time: {execution_time:.2f}s"
+                ]
+                
+                if analysis['errors']:
+                    feedback_details.append(f"Errors encountered: {len(analysis['errors'])}")
+                    for error in analysis['errors'][:2]:  # Include first 2 errors
+                        feedback_details.append(f"  - {error['command']}: {error['error'][:50]}")
+                
+                detailed_feedback = " | ".join(feedback_details)
                 
                 # Always update persistent strategy database for ANY learned strategy
                 learned_reasons = ["high_confidence_persistent", "highest_confidence_learned", "learned_strategy"]
@@ -538,18 +618,19 @@ class ReflexiveK8sWorkflow:
                         execution_time=execution_time,
                         pod_name=state["pod_name"],
                         namespace=state["namespace"],
-                        feedback=f"Execution result: {'success' if success else 'failure'}, time: {execution_time:.1f}s"
+                        feedback=detailed_feedback
                     )
-                    logger.info(f"✅ Updated persistent strategy performance: {strategy['id']} (success={success}, time={execution_time:.1f}s)")
+                    logger.info(f"✅ UPDATED PERSISTENT STRATEGY WITH REAL RESULTS: {strategy['id']}")
+                    logger.info(f"   Success: {success}, Time: {execution_time:.1f}s, Commands: {analysis['successful_commands']}/{analysis['total_commands']}")
                     
                     # Force update strategy confidence in current state
                     strategy["usage_count"] = strategy.get("usage_count", 0) + 1
                     strategy["last_used"] = datetime.now().isoformat()
                     state["current_strategy"] = strategy
                 else:
-                    logger.info(f"Recorded performance for strategy: {strategy['id']} (type: {strategy.get('selection_reason', 'unknown')})")
+                    logger.info(f"📊 Recorded real performance for strategy: {strategy['id']} (type: {strategy.get('selection_reason', 'unknown')})")
             else:
-                logger.warning("No strategy ID found for performance tracking")
+                logger.warning("⚠️ No strategy ID found for performance tracking")
         
         except Exception as e:
             logger.error("Fix execution failed", error=str(e))

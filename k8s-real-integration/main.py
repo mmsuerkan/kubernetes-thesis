@@ -182,12 +182,20 @@ async def startup_event():
         ai_command_generator = AICommandGenerator(openai_api_key)
         logger.info("Persistent memory systems initialized successfully")
         
-        # Initialize workflow
+        # Initialize workflow with kubectl dry-run option
+        kubectl_dry_run = os.getenv("KUBECTL_DRY_RUN", "false").lower() == "true"
+        
         workflow_instance = ReflexiveK8sWorkflow(
             openai_api_key=openai_api_key,
             go_service_url="",
-            reflection_depth=reflection_depth
+            reflection_depth=reflection_depth,
+            kubectl_dry_run=kubectl_dry_run
         )
+        
+        if kubectl_dry_run:
+            logger.warning("🧪 KUBECTL DRY RUN MODE ENABLED - No real commands will be executed!")
+        else:
+            logger.info("⚡ KUBECTL REAL EXECUTION MODE ENABLED - Commands will be executed!")
         logger.info("Reflexion workflow initialized successfully")
         
     except Exception as e:
