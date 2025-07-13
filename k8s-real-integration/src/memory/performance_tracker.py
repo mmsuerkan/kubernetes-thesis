@@ -51,6 +51,33 @@ class PerformanceTracker:
                 )
             """)
             
+            self._init_remaining_tables()
+            conn.commit()
+    
+    def clear_all_metrics(self) -> bool:
+        """Clear all performance metrics"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Clear all metrics
+                cursor.execute("DELETE FROM performance_metrics")
+                deleted_metrics = cursor.rowcount
+                
+                conn.commit()
+                
+                logger.info(f"Cleared {deleted_metrics} performance metrics")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to clear performance metrics: {e}")
+            return False
+    
+    def _init_remaining_tables(self):
+        """Initialize remaining database tables"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
             # Performance history table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS performance_history (

@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional
 import uvicorn
 import structlog
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -412,47 +413,90 @@ async def get_reflexion_metrics():
 @app.get("/api/v1/reflexion/strategies")
 async def get_learned_strategies():
     """Get all learned strategies from the knowledge base"""
-    # This would query the persistent strategy database
-    return {
-        "strategies": [
-            {
-                "id": "temporal_1234",
-                "type": "temporal_optimization",
-                "confidence": 0.85,
-                "usage_count": 5,
-                "success_rate": 0.8,
-                "description": "Timing-based optimization for CrashLoopBackOff"
-            },
-            {
-                "id": "resource_5678",
-                "type": "resource_optimization",
-                "confidence": 0.92,
-                "usage_count": 8,
-                "success_rate": 0.875,
-                "description": "Resource adjustment strategy for memory issues"
-            }
-        ],
-        "total_count": 2,
-        "timestamp": datetime.now().isoformat()
-    }
+    if not strategy_db:
+        raise HTTPException(status_code=503, detail="Strategy database not initialized")
+    
+    try:
+        # Get all strategies from SQLite database
+        all_strategies = strategy_db.get_all_strategies()
+        
+        strategies_data = []
+        for strategy in all_strategies:
+            strategies_data.append({
+                "id": strategy.id,
+                "type": strategy.error_type,
+                "confidence": strategy.confidence,
+                "usage_count": strategy.usage_count,
+                "success_rate": strategy.success_rate,
+                "description": f"{strategy.error_type} strategy (source: {strategy.source})",
+                "created_at": strategy.created_at.isoformat(),
+                "last_used": strategy.last_used.isoformat() if strategy.last_used else None
+            })
+        
+        return {
+            "strategies": strategies_data,
+            "total_count": len(strategies_data),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get strategies: {e}")
+        return {
+            "strategies": [],
+            "total_count": 0,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 @app.get("/api/v1/reflexion/memory/episodic")
-async def get_episodic_memory():
-    """Get episodic memory entries"""
-    return {
-        "episodes": [
-            {
-                "episode_id": "ep_001",
-                "context": {"pod_name": "test-pod", "error_type": "ImagePullBackOff"},
-                "action_taken": {"type": "image_tag_replacement"},
-                "outcome": {"success": True, "resolution_time": 30},
-                "lessons_learned": ["Image tag validation is crucial"],
-                "timestamp": "2024-07-10T10:30:00"
-            }
-        ],
-        "total_episodes": 15,
-        "memory_utilization": 0.3
-    }
+async def get_episodic_memory(limit: int = 10):
+    """Get episodic memory entries from SQLite database"""
+    if not episodic_memory:
+        raise HTTPException(status_code=503, detail="Episodic memory not initialized")
+    
+    try:
+        # Get recent episodes from SQLite database
+        recent_episodes = episodic_memory.get_recent_episodes(limit=limit)
+        
+        episodes_data = []
+        for episode in recent_episodes:
+            episodes_data.append({
+                "episode_id": episode.id,
+                "context": {
+                    "pod_name": episode.pod_name,
+                    "namespace": episode.namespace,
+                    "error_type": episode.error_type
+                },
+                "action_taken": episode.actions_taken,
+                "outcome": episode.outcome,
+                "lessons_learned": episode.lessons_learned,
+                "confidence_gain": episode.confidence_after - episode.confidence_before,
+                "resolution_time": episode.resolution_time,
+                "reflection_quality": episode.reflection_quality,
+                "timestamp": episode.timestamp.isoformat()
+            })
+        
+        # Get total statistics
+        stats = episodic_memory.get_memory_statistics()
+        
+        return {
+            "episodes": episodes_data,
+            "total_episodes": stats.get("total_episodes", 0),
+            "memory_utilization": min(1.0, stats.get("total_episodes", 0) / 5000),  # Based on config limit
+            "avg_confidence_gain": stats.get("avg_confidence_gain", 0),
+            "avg_resolution_time": stats.get("avg_resolution_time", 0),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get episodic memory: {e}")
+        return {
+            "episodes": [],
+            "total_episodes": 0,
+            "memory_utilization": 0,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 # Configuration endpoints
 @app.get("/api/v1/config")
@@ -475,6 +519,83 @@ async def update_reflection_depth(depth: str):
     
     # In production, this would update the workflow configuration
     return {"message": f"Reflection depth updated to {depth}", "timestamp": datetime.now().isoformat()}
+
+# Memory management endpoints
+@app.delete("/api/v1/memory/clear")
+async def clear_all_memory():
+    """Clear all learned strategies and episodic memory"""
+    try:
+        cleared_items = {
+            "strategy_database": False,
+            "episodic_memory": False,
+            "performance_tracker": False
+        }
+        
+        # Clear strategy database
+        if strategy_db:
+            strategy_db.clear_all_strategies()
+            cleared_items["strategy_database"] = True
+            logger.info("Strategy database cleared")
+        
+        # Clear episodic memory
+        if episodic_memory:
+            episodic_memory.clear_all_episodes()
+            cleared_items["episodic_memory"] = True
+            logger.info("Episodic memory cleared")
+        
+        # Clear performance tracker
+        if performance_tracker:
+            performance_tracker.clear_all_metrics()
+            cleared_items["performance_tracker"] = True
+            logger.info("Performance tracker cleared")
+        
+        return {
+            "message": "Memory cleared successfully",
+            "cleared_components": cleared_items,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("Failed to clear memory", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to clear memory: {str(e)}")
+
+@app.delete("/api/v1/memory/strategies")
+async def clear_strategy_memory():
+    """Clear only learned strategies"""
+    try:
+        if not strategy_db:
+            raise HTTPException(status_code=503, detail="Strategy database not initialized")
+        
+        strategy_db.clear_all_strategies()
+        logger.info("Strategy database cleared")
+        
+        return {
+            "message": "Strategy memory cleared successfully",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("Failed to clear strategy memory", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to clear strategy memory: {str(e)}")
+
+@app.delete("/api/v1/memory/episodes")
+async def clear_episodic_memory():
+    """Clear only episodic memory"""
+    try:
+        if not episodic_memory:
+            raise HTTPException(status_code=503, detail="Episodic memory not initialized")
+        
+        episodic_memory.clear_all_episodes()
+        logger.info("Episodic memory cleared")
+        
+        return {
+            "message": "Episodic memory cleared successfully",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("Failed to clear episodic memory", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to clear episodic memory: {str(e)}")
 
 # Debug and development endpoints
 @app.post("/api/v1/debug/test-gpt4-direct")
@@ -984,11 +1105,34 @@ async def generate_kubectl_commands(request: CommandExecutionRequest):
     start_time = datetime.now()
     
     try:
+        # Get lessons learned from episodic memory for this error type
+        context_dict = {
+            "pod_name": request.pod_name,
+            "namespace": request.namespace,
+            "error_context": {"error_type": request.error_type}
+        }
+        
+        lessons_learned = []
+        if episodic_memory:
+            try:
+                similar_episodes = episodic_memory.get_similar_episodes(
+                    error_type=request.error_type,
+                    context=context_dict,
+                    limit=5
+                )
+                for episode in similar_episodes:
+                    lessons_learned.extend(episode.lessons_learned)
+                
+                logger.info(f"🧠 REFLEXION: Found {len(lessons_learned)} lessons from {len(similar_episodes)} similar episodes")
+            except Exception as e:
+                logger.warning(f"Could not retrieve lessons learned: {e}")
+        
         # Convert real K8s data to the format expected by AI generator
         ai_real_k8s_data = {
             "pod": request.real_k8s_data.pod_spec,
             "events": request.real_k8s_data.events,
-            "logs": request.real_k8s_data.logs
+            "logs": request.real_k8s_data.logs,
+            "lessons_learned": lessons_learned  # Add reflexion insights
         }
         
         # Generate commands using AI

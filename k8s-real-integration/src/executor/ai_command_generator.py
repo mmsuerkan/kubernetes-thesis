@@ -133,7 +133,8 @@ class AICommandGenerator:
             "container_info": container_info,
             "error_messages": error_messages,
             "log_errors": log_errors,
-            "pod_phase": pod_spec.get("status", {}).get("phase", "Unknown")
+            "pod_phase": pod_spec.get("status", {}).get("phase", "Unknown"),
+            "lessons_learned": real_k8s_data.get("lessons_learned", [])  # Add lessons from workflow
         }
     
     async def _call_gpt4_for_commands(self, context: Dict[str, Any]) -> Dict[str, List[str]]:
@@ -197,6 +198,16 @@ IMPORTANT: This appears to be a standalone Pod (simple name without deployment h
 Use pod-level fixes: kubectl delete pod, kubectl run, etc.
 """
 
+        # Add lessons learned from reflexion to the prompt
+        lessons_section = ""
+        if context.get('lessons_learned'):
+            lessons_section = f"""
+LESSONS LEARNED FROM PAST EXPERIENCES:
+{json.dumps(context['lessons_learned'], indent=2)}
+
+🧠 REFLEXION INSIGHTS: Use these lessons to improve your command generation.
+Consider what worked well and what failed in similar situations."""
+
         human_prompt = f"""Generate kubectl commands to fix this Kubernetes error:
 
 ERROR TYPE: {context['error_type']}
@@ -216,15 +227,33 @@ ERROR MESSAGES:
 
 LOG ERRORS:
 {json.dumps(context['log_errors'], indent=2)}
+{lessons_section}
 
-Generate safe, effective kubectl commands following the specified JSON format."""
+Generate safe, effective kubectl commands following the specified JSON format.
+🎯 IMPORTANT: If lessons learned are provided, incorporate those insights into your command selection."""
 
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_prompt)
         ]
         
+        # Log the full prompt for debugging
+        logger.info("🤖 AI PROMPT DEBUG - SYSTEM MESSAGE:")
+        logger.info("="*80)
+        logger.info(system_prompt)
+        logger.info("="*80)
+        logger.info("🤖 AI PROMPT DEBUG - HUMAN MESSAGE:")
+        logger.info("="*80)
+        logger.info(human_prompt)
+        logger.info("="*80)
+        
         response = await self.llm.ainvoke(messages)
+        
+        # Log AI response for debugging
+        logger.info("🤖 AI RESPONSE DEBUG:")
+        logger.info("="*80)
+        logger.info(response.content)
+        logger.info("="*80)
         
         # Parse JSON response
         try:

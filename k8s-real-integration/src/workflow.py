@@ -223,6 +223,14 @@ class ReflexiveK8sWorkflow:
         """Intelligent strategy selection based on learned knowledge"""
         logger.info("🧠 STRATEGY SELECTION START", pod_name=state["pod_name"], error_type=state["error_type"])
         
+        # Anti-infinite loop protection
+        retry_count = state.get("retry_count", 0)
+        if retry_count >= 5:  # Limit to 5 iterations max
+            logger.warning(f"🛑 RETRY LIMIT REACHED ({retry_count}) - Forcing workflow completion")
+            state["success"] = True  # Force completion
+            state["requires_human_intervention"] = True
+            return state
+        
         strategy_database = state.get("strategy_database", {})
         error_type = state["error_type"]
         
@@ -738,10 +746,14 @@ class ReflexiveK8sWorkflow:
         try:
             # Execute workflow (with or without checkpointing)
             if CHECKPOINT_AVAILABLE:
-                config = {"configurable": {"thread_id": thread_id or f"thread_{pod_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"}}
+                config = {
+                    "configurable": {"thread_id": thread_id or f"thread_{pod_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"},
+                    "recursion_limit": 50  # Increase recursion limit
+                }
                 result = await self.compiled_workflow.ainvoke(initial_state, config=config)
             else:
-                result = await self.compiled_workflow.ainvoke(initial_state)
+                config = {"recursion_limit": 50}  # Increase recursion limit
+                result = await self.compiled_workflow.ainvoke(initial_state, config=config)
             
             # Prepare response
             response = {

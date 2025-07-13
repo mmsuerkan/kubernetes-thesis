@@ -246,6 +246,67 @@ class EpisodicMemoryManager:
             logger.error(f"Failed to get learning progression: {e}")
             return {}
     
+    def clear_all_episodes(self) -> bool:
+        """Clear all episodes from database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Clear all episodes
+                cursor.execute("DELETE FROM episodes")
+                deleted_episodes = cursor.rowcount
+                
+                conn.commit()
+                
+                logger.info(f"Cleared {deleted_episodes} episodes")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to clear episodes: {e}")
+            return False
+    
+    def get_recent_episodes(self, limit: int = 10) -> List[EpisodicMemory]:
+        """Get recent episodes from database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    SELECT id, pod_name, namespace, error_type, context, 
+                           actions_taken, outcome, lessons_learned, 
+                           confidence_before, confidence_after, resolution_time,
+                           timestamp, reflection_quality, insights_generated
+                    FROM episodes
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """, (limit,))
+                
+                episodes = []
+                for row in cursor.fetchall():
+                    episode = EpisodicMemory(
+                        id=row[0],
+                        pod_name=row[1],
+                        namespace=row[2],
+                        error_type=row[3],
+                        context=json.loads(row[4]),
+                        actions_taken=json.loads(row[5]),
+                        outcome=json.loads(row[6]),
+                        lessons_learned=json.loads(row[7]),
+                        confidence_before=row[8],
+                        confidence_after=row[9],
+                        resolution_time=row[10],
+                        timestamp=datetime.fromisoformat(row[11]),
+                        reflection_quality=row[12],
+                        insights_generated=row[13]
+                    )
+                    episodes.append(episode)
+                
+                return episodes
+                
+        except Exception as e:
+            logger.error(f"Failed to get recent episodes: {e}")
+            return []
+    
     def get_memory_statistics(self) -> Dict[str, Any]:
         """Get overall memory statistics"""
         try:

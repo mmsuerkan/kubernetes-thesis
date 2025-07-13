@@ -263,6 +263,67 @@ class StrategyDatabase:
             logger.error(f"Failed to update strategy performance: {e}")
             return False
     
+    def clear_all_strategies(self) -> bool:
+        """Clear all strategies from database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Clear all strategies
+                cursor.execute("DELETE FROM strategies")
+                deleted_strategies = cursor.rowcount
+                
+                # Clear usage history
+                cursor.execute("DELETE FROM strategy_usage")
+                deleted_usage = cursor.rowcount
+                
+                conn.commit()
+                
+                logger.info(f"Cleared {deleted_strategies} strategies and {deleted_usage} usage records")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to clear strategies: {e}")
+            return False
+    
+    def get_all_strategies(self) -> List[Strategy]:
+        """Get all strategies from database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    SELECT id, error_type, conditions, actions, confidence, 
+                           success_rate, usage_count, created_at, updated_at, 
+                           source, context, last_used
+                    FROM strategies
+                    ORDER BY confidence DESC, usage_count DESC
+                """)
+                
+                strategies = []
+                for row in cursor.fetchall():
+                    strategy = Strategy(
+                        id=row[0],
+                        error_type=row[1],
+                        conditions=json.loads(row[2]),
+                        actions=json.loads(row[3]),
+                        confidence=row[4],
+                        success_rate=row[5],
+                        usage_count=row[6],
+                        created_at=datetime.fromisoformat(row[7]),
+                        updated_at=datetime.fromisoformat(row[8]),
+                        source=row[9],
+                        context=json.loads(row[10]),
+                        last_used=datetime.fromisoformat(row[11]) if row[11] else None
+                    )
+                    strategies.append(strategy)
+                
+                return strategies
+                
+        except Exception as e:
+            logger.error(f"Failed to get all strategies: {e}")
+            return []
+    
     def get_strategy_statistics(self) -> Dict[str, Any]:
         """Get overall strategy database statistics"""
         try:
