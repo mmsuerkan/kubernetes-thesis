@@ -182,8 +182,8 @@ async def startup_event():
         ai_command_generator = AICommandGenerator(openai_api_key)
         logger.info("Persistent memory systems initialized successfully")
         
-        # Initialize workflow with kubectl dry-run option
-        kubectl_dry_run = os.getenv("KUBECTL_DRY_RUN", "false").lower() == "true"
+        # Initialize workflow with kubectl dry-run option (always disabled for real execution)
+        kubectl_dry_run = False
         
         workflow_instance = ReflexiveK8sWorkflow(
             openai_api_key=openai_api_key,
@@ -192,10 +192,7 @@ async def startup_event():
             kubectl_dry_run=kubectl_dry_run
         )
         
-        if kubectl_dry_run:
-            logger.warning("🧪 KUBECTL DRY RUN MODE ENABLED - No real commands will be executed!")
-        else:
-            logger.info("⚡ KUBECTL REAL EXECUTION MODE ENABLED - Commands will be executed!")
+        logger.info("⚡ KUBECTL REAL EXECUTION MODE ENABLED - All commands will be executed!")
         logger.info("Reflexion workflow initialized successfully")
         
     except Exception as e:
@@ -1093,97 +1090,18 @@ async def not_found_handler(request: Request, exc):
         content={"error": "Endpoint not found", "path": request.url.path}
     )
 
-# NEW: Phase 3.3 - kubectl Command Execution Endpoint
-@app.post("/api/v1/executor/generate-commands", response_model=CommandExecutionResponse)
-async def generate_kubectl_commands(request: CommandExecutionRequest):
+# DISABLED: kubectl Command Generation - Using YAML mode only
+# @app.post("/api/v1/executor/generate-commands", response_model=CommandExecutionResponse)
+async def generate_kubectl_commands_disabled(request: CommandExecutionRequest):
     """
-    Generate kubectl commands for pod error fixing
-    
-    This endpoint uses AI to generate kubectl commands based on the error type
-    and real K8s data, then returns the command URL for Go service execution.
+    DISABLED: kubectl Command Generation - Using YAML mode only
+    This endpoint is disabled to force YAML-only mode for better resource control
     """
-    if not ai_command_generator:
-        raise HTTPException(status_code=503, detail="AI Command Generator not initialized")
-    
-    logger.info("Generating kubectl commands", 
-                pod_name=request.pod_name, 
-                error_type=request.error_type,
-                dry_run=request.dry_run)
-    
-    start_time = datetime.now()
-    
-    try:
-        # Get lessons learned from episodic memory for this error type
-        context_dict = {
-            "pod_name": request.pod_name,
-            "namespace": request.namespace,
-            "error_context": {"error_type": request.error_type}
-        }
-        
-        lessons_learned = []
-        if episodic_memory:
-            try:
-                similar_episodes = episodic_memory.get_similar_episodes(
-                    error_type=request.error_type,
-                    context=context_dict,
-                    limit=5
-                )
-                for episode in similar_episodes:
-                    lessons_learned.extend(episode.lessons_learned)
-                
-                logger.info(f"🧠 REFLEXION: Found {len(lessons_learned)} lessons from {len(similar_episodes)} similar episodes")
-            except Exception as e:
-                logger.warning(f"Could not retrieve lessons learned: {e}")
-        
-        # Convert real K8s data to the format expected by AI generator
-        ai_real_k8s_data = {
-            "pod": request.real_k8s_data.pod_spec,
-            "events": request.real_k8s_data.events,
-            "logs": request.real_k8s_data.logs,
-            "lessons_learned": lessons_learned  # Add reflexion insights
-        }
-        
-        # Generate commands using AI
-        commands = await ai_command_generator.generate_kubectl_commands(
-            error_type=request.error_type,
-            pod_name=request.pod_name,
-            namespace=request.namespace,
-            strategy=request.strategy,
-            real_k8s_data=ai_real_k8s_data
-        )
-        
-        # Calculate execution time
-        execution_time = (datetime.now() - start_time).total_seconds()
-        
-        # Count total commands
-        total_commands = sum(len(cmd_list) for cmd_list in commands.values())
-        
-        # Prepare Go service URL for command execution
-        go_service_url = f"http://localhost:8080/api/v1/execute-commands"
-        
-        response = CommandExecutionResponse(
-            pod_name=request.pod_name,
-            namespace=request.namespace,
-            error_type=request.error_type,
-            commands_generated=total_commands,
-            commands_executed=0,  # Will be updated by Go service
-            success=True,
-            execution_time=execution_time,
-            commands=commands,
-            go_service_url=go_service_url,
-            message=f"Generated {total_commands} kubectl commands for {request.error_type}"
-        )
-        
-        logger.info("kubectl commands generated successfully",
-                   pod_name=request.pod_name,
-                   commands_count=total_commands,
-                   execution_time=execution_time)
-        
-        return response
-        
-    except Exception as e:
-        logger.error("Failed to generate kubectl commands", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Command generation failed: {str(e)}")
+    logger.warning("kubectl command generation disabled - system uses YAML mode only")
+    raise HTTPException(
+        status_code=503, 
+        detail="kubectl command generation disabled - system uses YAML manifest mode only"
+    )
 
 # NEW: Phase 3.7 - Execution Feedback for Reflexion Learning
 @app.post("/api/v1/reflexion/execution-feedback", response_model=ExecutionFeedbackResponse)

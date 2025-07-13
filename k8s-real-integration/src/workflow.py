@@ -36,6 +36,7 @@ from .memory.episodic_memory import EpisodicMemoryManager, EpisodicMemory
 from .memory.performance_tracker import PerformanceTracker
 from .executor.real_kubectl_executor import RealKubectlExecutor
 from .executor.ai_command_generator import AICommandGenerator
+from .executor.yaml_manifest_generator import YAMLManifestGenerator
 
 logger = structlog.get_logger()
 logger.info("🚀 Workflow module loaded - Enhanced logging enabled")
@@ -72,6 +73,12 @@ class ReflexiveK8sWorkflow:
         
         # Initialize AI command generator
         self.ai_command_generator = AICommandGenerator(
+            openai_api_key=openai_api_key,
+            model="gpt-3.5-turbo"
+        )
+        
+        # Initialize YAML manifest generator
+        self.yaml_manifest_generator = YAMLManifestGenerator(
             openai_api_key=openai_api_key,
             model="gpt-3.5-turbo"
         )
@@ -490,8 +497,12 @@ class ReflexiveK8sWorkflow:
     
     @traceable(name="execute_fix_node")
     async def _execute_fix_node(self, state: ReflexiveK8sState) -> ReflexiveK8sState:
-        """Execute the selected strategy with REAL kubectl commands"""
-        logger.info("🚀 REAL KUBECTL EXECUTION START", pod_name=state["pod_name"])
+        """Execute the selected strategy with REAL kubectl commands or YAML manifests"""
+        
+        # Always use YAML mode for better control
+        use_yaml_mode = True
+        
+        logger.info("📄 YAML MANIFEST MODE EXECUTION START", pod_name=state["pod_name"])
         
         try:
             # Get strategy from state
@@ -514,36 +525,91 @@ class ReflexiveK8sWorkflow:
                 # Add lessons learned to real data
                 real_k8s_data["lessons_learned"] = state.get("lessons_learned", [])
             
-            logger.info("🤖 GENERATING KUBECTL COMMANDS WITH AI")
-            
-            # Generate kubectl commands using AI
-            kubectl_commands = await self.ai_command_generator.generate_kubectl_commands(
-                error_type=error_type,
-                pod_name=pod_name,
-                namespace=namespace,
-                strategy=strategy,
-                real_k8s_data=real_k8s_data
-            )
-            
-            logger.info(f"✅ AI GENERATED {sum(len(cmds) for cmds in kubectl_commands.values())} COMMANDS")
-            
-            # Execute the kubectl commands with real executor
-            logger.info("⚡ EXECUTING REAL KUBECTL COMMANDS")
-            execution_start = datetime.now()
-            
-            execution_results = await self.kubectl_executor.execute_kubectl_commands_dict(kubectl_commands)
-            
-            execution_time = (datetime.now() - execution_start).total_seconds()
-            
-            # Analyze execution results
-            analysis = self.kubectl_executor.analyze_execution_results(execution_results)
+            if use_yaml_mode:
+                # YAML Manifest Mode
+                logger.info("📄 GENERATING YAML MANIFEST WITH AI")
+                
+                manifest_result = await self.yaml_manifest_generator.generate_fix_manifest(
+                    error_type=error_type,
+                    pod_name=pod_name,
+                    namespace=namespace,
+                    strategy=strategy,
+                    real_k8s_data=real_k8s_data
+                )
+                
+                logger.info(f"✅ AI GENERATED YAML MANIFEST: {manifest_result['manifest_filename']}")
+                
+                # Execute the YAML manifest
+                logger.info("⚡ APPLYING YAML MANIFEST")
+                execution_start = datetime.now()
+                
+                yaml_execution = await self.kubectl_executor.execute_yaml_manifest(
+                    manifest_content=manifest_result["manifest"],
+                    manifest_filename=manifest_result["manifest_filename"],
+                    delete_command=manifest_result["delete_command"],
+                    validation_commands=manifest_result["validation_commands"]
+                )
+                
+                execution_time = (datetime.now() - execution_start).total_seconds()
+                
+                # Convert YAML results to standard format
+                success = yaml_execution["manifest_applied"]
+                fix_success = success
+                
+                analysis = {
+                    "overall_success": success,
+                    "fix_success": fix_success,
+                    "successful_commands": 1 if success else 0,
+                    "total_commands": 1,
+                    "success_rate": 1.0 if success else 0.0,
+                    "errors": [] if success else [{"command": "kubectl apply", "error": yaml_execution.get("error", "Failed to apply manifest")}]
+                }
+                
+                execution_results = {
+                    "manifest_apply": yaml_execution,
+                    "validation": yaml_execution.get("validation_results", [])
+                }
+                
+                kubectl_commands = {
+                    "manifest": [manifest_result["manifest"]],
+                    "apply_command": [manifest_result["apply_command"]],
+                    "validation_commands": manifest_result["validation_commands"]
+                }
+                
+            else:
+                # Traditional kubectl command mode
+                logger.info("🤖 GENERATING KUBECTL COMMANDS WITH AI")
+                
+                kubectl_commands = await self.ai_command_generator.generate_kubectl_commands(
+                    error_type=error_type,
+                    pod_name=pod_name,
+                    namespace=namespace,
+                    strategy=strategy,
+                    real_k8s_data=real_k8s_data
+                )
+                
+                logger.info(f"✅ AI GENERATED {sum(len(cmds) for cmds in kubectl_commands.values())} COMMANDS")
+                
+                # Execute the kubectl commands with real executor
+                logger.info("⚡ EXECUTING REAL KUBECTL COMMANDS")
+                execution_start = datetime.now()
+                
+                execution_results = await self.kubectl_executor.execute_kubectl_commands_dict(kubectl_commands)
+                
+                execution_time = (datetime.now() - execution_start).total_seconds()
+                
+                # Analyze execution results
+                analysis = self.kubectl_executor.analyze_execution_results(execution_results)
             
             # Determine overall success
             success = analysis["overall_success"]
             fix_success = analysis["fix_success"]
             
             logger.info("=" * 80)
-            logger.info("📊 REAL KUBECTL EXECUTION SUMMARY:")
+            if use_yaml_mode:
+                logger.info("📊 YAML MANIFEST EXECUTION SUMMARY:")
+            else:
+                logger.info("📊 KUBECTL COMMAND EXECUTION SUMMARY:")
             logger.info(f"   🎯 Overall Success: {success}")
             logger.info(f"   🔧 Fix Success: {fix_success}")
             logger.info(f"   📋 Commands Executed: {analysis['successful_commands']}/{analysis['total_commands']}")

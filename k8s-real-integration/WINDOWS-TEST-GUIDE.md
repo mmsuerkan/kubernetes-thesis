@@ -158,6 +158,31 @@ test-oom      1/1     Running           0          30s
 }
 ```
 
+## 🆕 YAML Manifest Mode Test
+
+### YAML Test Senaryosu:
+```cmd
+# OOMKilled test with YAML generation
+kubectl apply -f test-yaml-mode.yaml
+
+# Sistem otomatik olarak şunu yapacak:
+# 1. OOMKilled tespit edecek (Go service)
+# 2. AI ile yeni YAML manifest üretecek (memory: 256Mi)
+# 3. Temporary file oluşturup kubectl apply -f ile uygulayacak
+# 4. Validation komutları çalıştıracak
+# 5. Temporary file'ı temizleyecek
+```
+
+### YAML Mode Avantajları (Artık Default):
+- ✅ workingDir set edilebilir (kubectl run ile mümkün değil)
+- ✅ securityContext ayarlanabilir  
+- ✅ Complex volume mounts
+- ✅ initContainers eklenebilir
+- ✅ Full pod spec kontrolü
+- ✅ Affinity/Toleration rules
+- ✅ Resource quotas and limits
+- ✅ Environment variables from ConfigMaps/Secrets
+
 ## 🚀 İleri Seviye Test
 
 ### Reflexion Learning Test:

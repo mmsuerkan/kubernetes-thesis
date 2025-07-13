@@ -199,12 +199,10 @@ func (pw *PodWatcher) processPod(pod *v1.Pod) {
 		log.Printf("🚨 Human intervention required for pod %s", podKey)
 	} else {
 		log.Printf("🤖 AI strategy available for pod %s", podKey)
+		log.Printf("📄 YAML Manifest mode active - Python service handles pod fixing automatically")
 		
-		// Phase 3.4: Generate and execute kubectl commands
-		err := pw.generateAndExecuteCommands(pod, response, errorType)
-		if err != nil {
-			log.Printf("❌ Failed to generate/execute commands for pod %s: %v", podKey, err)
-		}
+		// YAML mode: Python service already processed the pod with YAML manifests
+		// No need for separate kubectl command generation
 	}
 }
 

@@ -29,26 +29,34 @@ This system implements the **Reflexion methodology** published in arXiv:2303.113
 
 ## 🎯 Core System Features
 
-### 1. 🧠 **Reflexion-Based AI Learning**
+### 1. 📄 **YAML Manifest Generation (BREAKTHROUGH!)**
+- **🚀 Complete Resource Control**: Generate full K8s manifests instead of limited kubectl commands
+- **💪 No kubectl Limitations**: Set workingDir, securityContext, affinity, tolerations, resources, etc.
+- **🤖 AI-Powered Manifest Creation**: GPT generates valid YAML fixing the exact error with perfect syntax
+- **⚡ Automatic Pod Replacement**: Delete existing pod + apply new manifest with fixes
+- **✅ Validation Pipeline**: Apply manifest and run validation commands
+- **🎯 Real Success Story**: OOMKilled 10Mi → 512Mi (51x memory increase) + CPU limits automatically added
+
+### 2. 🧠 **Reflexion-Based AI Learning**
 - **Verbal Reinforcement Learning**: No model fine-tuning, learns through linguistic feedback
 - **Episodic Memory Storage**: SQLite-based persistent memory across restarts  
 - **Lessons Learned Integration**: Past experiences enhance future AI command generation
 - **Strategy Evolution**: Automatic creation of learned strategies from successful patterns
 - **Real-time Learning**: Each error resolution improves system intelligence
 
-### 2. 🤖 **AI-Enhanced Command Generation**
+### 3. 🤖 **AI-Enhanced Command Generation**
 - **GPT-3.5/GPT-4 Integration**: Kubernetes expert-level analysis and dynamic solution generation
 - **Reflexion-Augmented Prompts**: AI commands enhanced with past experience insights
 - **Debug Transparency**: Full AI prompt and response logging for complete visibility
 - **Context-Aware Decisions**: Pod vs Deployment detection for appropriate command selection
 
-### 3. 🎲 **Intelligent Decision Engine**
+### 4. 🎲 **Intelligent Decision Engine**
 - **80% Learned Strategy Usage**: Prioritizes proven solutions from episodic memory
 - **20% Exploration Rate**: Continues learning new approaches for continuous improvement  
 - **Confidence-Based Selection**: Strategy ranking by success rate and usage frequency
 - **Anti-Recursion Protection**: Intelligent loop prevention with graceful fallbacks
 
-### 4. ⚡ **Production-Ready Performance**
+### 5. ⚡ **Production-Ready Performance**
 - **Error Detection**: <2 seconds with real-time Kubernetes API monitoring
 - **Resolution Speed**: <30 seconds average (18 seconds with learned strategies)
 - **Command Safety**: Automatic dangerous command blocking and validation
@@ -579,7 +587,8 @@ curl http://localhost:8000/health
 ---
 
 **🧠 Key Achievement**: Successfully implemented Reflexion Pattern for Kubernetes domain  
+**📄 YAML Breakthrough**: AI-generated complete manifests with 51x memory increase (10Mi→512Mi)  
 **📊 Performance**: 100% error resolution success rate with 117% learning improvement  
-**🎯 Innovation**: First autonomous K8s system with verbal reinforcement learning  
+**🎯 Innovation**: First autonomous K8s system with verbal reinforcement learning + YAML generation  
 
 </div>

@@ -11,6 +11,9 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
+import os
+import tempfile
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +335,96 @@ class RealKubectlExecutor:
             command=command,
             timestamp=datetime.now()
         )
+    
+    async def execute_yaml_manifest(self,
+                                  manifest_content: str,
+                                  manifest_filename: str,
+                                  delete_command: str,
+                                  validation_commands: List[str]) -> Dict[str, Any]:
+        """
+        Execute a YAML manifest file
+        
+        Args:
+            manifest_content: YAML content as string
+            manifest_filename: Filename for the manifest
+            delete_command: Command to delete existing pod
+            validation_commands: Commands to validate after apply
+            
+        Returns:
+            Dict with execution results
+        """
+        results = {
+            "manifest_applied": False,
+            "manifest_path": None,
+            "delete_result": None,
+            "apply_result": None,
+            "validation_results": [],
+            "cleanup_result": None
+        }
+        
+        temp_dir = None
+        try:
+            # Create temporary directory for manifest
+            temp_dir = tempfile.mkdtemp(prefix="k8s-manifest-")
+            manifest_path = os.path.join(temp_dir, manifest_filename)
+            
+            # Write manifest to file
+            with open(manifest_path, 'w') as f:
+                f.write(manifest_content)
+            
+            logger.info(f"📄 Created manifest file: {manifest_path}")
+            logger.info("📄 MANIFEST FILE CONTENT:")
+            logger.info("=" * 60)
+            logger.info(manifest_content)
+            logger.info("=" * 60)
+            results["manifest_path"] = manifest_path
+            
+            # First delete the existing pod
+            logger.info("🗑️ Deleting existing pod...")
+            delete_result = await self.execute_command(delete_command)
+            results["delete_result"] = delete_result
+            
+            if delete_result.success:
+                logger.info("✅ Pod deleted successfully")
+                # Wait a moment for pod to be fully deleted
+                await asyncio.sleep(2)
+            else:
+                logger.warning("⚠️ Pod deletion failed, continuing with apply...")
+            
+            # Apply the manifest
+            apply_command = f"kubectl apply -f {manifest_path}"
+            apply_result = await self.execute_command(apply_command)
+            results["apply_result"] = apply_result
+            
+            if apply_result.success:
+                logger.info("✅ Manifest applied successfully")
+                results["manifest_applied"] = True
+                
+                # Run validation commands
+                logger.info("🔍 Running validation commands...")
+                for cmd in validation_commands:
+                    val_result = await self.execute_command(cmd)
+                    results["validation_results"].append(val_result)
+            else:
+                logger.error("❌ Failed to apply manifest")
+                
+        except Exception as e:
+            logger.error(f"Error executing manifest: {str(e)}")
+            results["error"] = str(e)
+            
+        finally:
+            # Cleanup temporary file
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    import shutil
+                    shutil.rmtree(temp_dir)
+                    logger.info("🧹 Cleaned up temporary manifest file")
+                    results["cleanup_result"] = "success"
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temp dir: {str(e)}")
+                    results["cleanup_result"] = f"failed: {str(e)}"
+                    
+        return results
     
     async def execute_command_sequence(self, 
                                      commands: List[str],
