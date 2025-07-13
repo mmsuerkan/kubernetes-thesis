@@ -84,19 +84,50 @@ func (e *KubectlExecutor) ExecuteCommands(ctx context.Context, commands []string
 		}
 	}
 	
-	// Calculate final status
+	// Calculate final status based on command success
+	commandStatus := "failed"
 	if report.FailureCount == 0 {
-		report.Status = "success"
+		commandStatus = "success"
 	} else if report.SuccessCount > 0 {
-		report.Status = "partial"
-	} else {
-		report.Status = "failed"
+		commandStatus = "partial"
 	}
-	
+
+	// 🎯 NEW: Check actual pod status to determine real success
+	finalStatus := commandStatus
+	podStatus, err := e.GetPodStatus(podName, namespace)
+	if err != nil {
+		log.Printf("⚠️ Could not check pod status: %v", err)
+		finalStatus = commandStatus // Fall back to command status
+	} else {
+		log.Printf("🔍 Pod %s current status: %s", podName, podStatus)
+		
+		// Determine success based on pod status
+		switch podStatus {
+		case "Running":
+			finalStatus = "success"
+			log.Printf("✅ Pod is Running - marking as SUCCESS")
+		case "Succeeded":
+			finalStatus = "success" 
+			log.Printf("✅ Pod Succeeded - marking as SUCCESS")
+		case "CrashLoopBackOff", "Error", "Failed", "ImagePullBackOff", "ErrImagePull":
+			finalStatus = "failed"
+			log.Printf("❌ Pod is in error state (%s) - marking as FAILED", podStatus)
+		case "Pending", "ContainerCreating":
+			finalStatus = "partial"
+			log.Printf("⏳ Pod is still starting (%s) - marking as PARTIAL", podStatus)
+		default:
+			log.Printf("🤷 Unknown pod status (%s) - using command status (%s)", podStatus, commandStatus)
+			finalStatus = commandStatus
+		}
+	}
+
+	report.Status = finalStatus
 	report.Duration = time.Since(startTime).String()
 	
 	log.Printf("📊 Execution completed for pod %s: %s (%d/%d commands succeeded)", 
 		podName, report.Status, report.SuccessCount, report.TotalCommands)
+	log.Printf("🎯 Final decision: Commands=%s, PodStatus=%s → Result=%s", 
+		commandStatus, podStatus, finalStatus)
 	
 	return report, nil
 }

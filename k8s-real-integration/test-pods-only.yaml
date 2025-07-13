@@ -1,0 +1,85 @@
+# Test Pods - Default Namespace - Single Pods Only
+apiVersion: v1
+kind: Pod
+metadata:
+  name: crash-test-pod
+  namespace: default
+  labels:
+    test-type: crash-loop
+spec:
+  containers:
+  - name: bad-command
+    image: busybox
+    command: ["sh", "-c", "exit 1"]  # Hemen çıkış yapacak
+  restartPolicy: Always
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: image-test-pod
+  namespace: default
+  labels:
+    test-type: image-pull
+spec:
+  containers:
+  - name: bad-image
+    image: nginx:yok-boyle-bir-tag  # Var olmayan tag
+  restartPolicy: Always
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-test-pod
+  namespace: default
+  labels:
+    test-type: oom-killed
+spec:
+  containers:
+  - name: memory-hog
+    image: polinux/stress
+    resources:
+      limits:
+        memory: "10Mi"
+    command: ["stress"]
+    args: ["--vm", "1", "--vm-bytes", "50M", "--vm-hang", "1"]
+  restartPolicy: Always
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-test-pod
+  namespace: default
+  labels:
+    test-type: liveness-fail
+spec:
+  containers:
+  - name: probe-fail
+    image: nginx
+    livenessProbe:
+      httpGet:
+        path: /yok-boyle-bir-path
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      failureThreshold: 3
+  restartPolicy: Always
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: env-test-pod
+  namespace: default
+  labels:
+    test-type: missing-config
+spec:
+  containers:
+  - name: needs-config
+    image: busybox
+    command: ["sleep", "3600"]
+    env:
+    - name: CONFIG_VALUE
+      valueFrom:
+        configMapKeyRef:
+          name: yok-boyle-configmap
+          key: some-key
+  restartPolicy: Always

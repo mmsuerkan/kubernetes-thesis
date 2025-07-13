@@ -19,7 +19,7 @@ class ReflectionEngine:
     
     def __init__(self, 
                  openai_api_key: str,
-                 model: str = "gpt-4-turbo-preview",
+                 model: str = "gpt-3.5-turbo",
                  reflection_depth: str = "medium"):
         self.llm = ChatOpenAI(
             api_key=openai_api_key,

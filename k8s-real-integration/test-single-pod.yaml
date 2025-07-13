@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-crash
+  namespace: default
+spec:
+  containers:
+  - name: crasher
+    image: busybox
+    command: ["sh", "-c", "echo 'Starting...'; sleep 5; exit 1"]
+  restartPolicy: Always

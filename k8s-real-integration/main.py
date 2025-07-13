@@ -461,7 +461,7 @@ async def get_configuration():
     return {
         "reflection_depth": os.getenv("REFLECTION_DEPTH", "medium"),
         "go_service_url": os.getenv("GO_SERVICE_URL", "http://localhost:8080"),
-        "openai_model": "gpt-4-turbo-preview",
+        "openai_model": "gpt-3.5-turbo",
         "max_reflection_depth": 5,
         "strategy_confidence_threshold": 0.7
     }
@@ -486,7 +486,7 @@ async def test_gpt4_direct(request: dict):
         
         llm = ChatOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4-turbo-preview",
+            model="gpt-3.5-turbo",
             temperature=0.7,
             timeout=30
         )
@@ -504,7 +504,7 @@ async def test_gpt4_direct(request: dict):
             "success": True,
             "prompt": prompt,
             "response": response.content,
-            "model": "gpt-4-turbo-preview",
+            "model": "gpt-3.5-turbo",
             "timestamp": datetime.now().isoformat()
         }
         

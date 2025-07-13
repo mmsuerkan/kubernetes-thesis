@@ -16,7 +16,7 @@ logger.info("🤖 AI Command Generator module loaded - Enhanced logging enabled"
 class AICommandGenerator:
     """AI-powered kubectl command generator using GPT-4"""
     
-    def __init__(self, openai_api_key: str, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, openai_api_key: str, model: str = "gpt-3.5-turbo"):
         self.llm = ChatOpenAI(
             api_key=openai_api_key,
             model=model,
@@ -157,16 +157,20 @@ For ImagePullBackOff:
 
 For CrashLoopBackOff:
 - Root Cause: Container exits with error
-- Use kubectl patch for resource limits
-- Use kubectl delete+recreate for command fixes
+- If pod is managed by Deployment: Use "kubectl patch deployment" or "kubectl scale" 
+- For standalone pods: Use kubectl delete+recreate
+- NEVER create new pods with same name as deployment-managed pods
 
 WORKING COMMAND EXAMPLES:
 ✅ kubectl get pod podname -n namespace
 ✅ kubectl delete pod podname -n namespace  
-✅ kubectl run podname --image=nginx:latest --restart=Never -n namespace
+✅ kubectl run newpodname --image=nginx:latest --restart=Never -n namespace
+✅ kubectl scale deployment deploymentname --replicas=0 -n namespace
+✅ kubectl scale deployment deploymentname --replicas=1 -n namespace
 ✅ kubectl describe pod podname -n namespace
 ❌ kubectl describe pod podname | grep "Image"  (pipe fails)
 ❌ kubectl get pod podname -o yaml > backup.yaml  (redirection fails)
+❌ kubectl run existing-pod-name (pod already exists error)
 
 Output format (use ONLY working commands):
 {
@@ -176,12 +180,31 @@ Output format (use ONLY working commands):
     "rollback_commands": ["kubectl delete pod {pod_name} -n {namespace}"]
 }"""
 
+        # Check if this is a standalone pod or deployment-managed pod
+        pod_name = context['pod_name']
+        is_deployment_pod = '-' in pod_name and len(pod_name.split('-')) >= 3
+        
+        deployment_warning = ""
+        if is_deployment_pod:
+            deployment_warning = """
+IMPORTANT: This pod appears to be managed by a Deployment (name contains hash suffix).
+DO NOT create new pods with same name - they will conflict!
+Use deployment-level fixes: kubectl scale, kubectl patch deployment, etc.
+"""
+        else:
+            deployment_warning = """
+IMPORTANT: This appears to be a standalone Pod (simple name without deployment hash).
+Use pod-level fixes: kubectl delete pod, kubectl run, etc.
+"""
+
         human_prompt = f"""Generate kubectl commands to fix this Kubernetes error:
 
 ERROR TYPE: {context['error_type']}
 POD NAME: {context['pod_name']}
 NAMESPACE: {context['namespace']}
 POD PHASE: {context['pod_phase']}
+
+{deployment_warning}
 
 STRATEGY: {context['strategy']['type']} (confidence: {context['strategy'].get('confidence', 0.0)})
 

@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-test
+---
+# Senaryo 1: CrashLoopBackOff - Hatalı komut
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crash-test-1
+  namespace: ai-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crash-test-1
+  template:
+    metadata:
+      labels:
+        app: crash-test-1
+    spec:
+      containers:
+      - name: bad-command
+        image: busybox
+        command: ["sh", "-c", "exit 1"]  # Hemen çıkış yapacak
+---
+# Senaryo 2: ImagePullBackOff - Yanlış image
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-test-1
+  namespace: ai-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-test-1
+  template:
+    metadata:
+      labels:
+        app: image-test-1
+    spec:
+      containers:
+      - name: bad-image
+        image: nginx:yok-boyle-bir-tag  # Var olmayan tag
+---
+# Senaryo 3: OOMKilled - Memory limit aşımı
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oom-test-1
+  namespace: ai-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oom-test-1
+  template:
+    metadata:
+      labels:
+        app: oom-test-1
+    spec:
+      containers:
+      - name: memory-hog
+        image: polinux/stress
+        resources:
+          limits:
+            memory: "10Mi"
+        command: ["stress"]
+        args: ["--vm", "1", "--vm-bytes", "50M", "--vm-hang", "1"]
+---
+# Senaryo 4: Liveness Probe Failure
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: probe-test-1
+  namespace: ai-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: probe-test-1
+  template:
+    metadata:
+      labels:
+        app: probe-test-1
+    spec:
+      containers:
+      - name: probe-fail
+        image: nginx
+        livenessProbe:
+          httpGet:
+            path: /yok-boyle-bir-path
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+---
+# Senaryo 5: Resource Quota Exceeded
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: test-quota
+  namespace: ai-test
+spec:
+  hard:
+    requests.cpu: "100m"
+    requests.memory: "100Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quota-test-1
+  namespace: ai-test
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: quota-test-1
+  template:
+    metadata:
+      labels:
+        app: quota-test-1
+    spec:
+      containers:
+      - name: quota-exceed
+        image: nginx
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "50Mi"
+---
+# Senaryo 6: ConfigMap Missing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configmap-test-1
+  namespace: ai-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: configmap-test-1
+  template:
+    metadata:
+      labels:
+        app: configmap-test-1
+    spec:
+      containers:
+      - name: needs-config
+        image: busybox
+        command: ["sleep", "3600"]
+        env:
+        - name: CONFIG_VALUE
+          valueFrom:
+            configMapKeyRef:
+              name: yok-boyle-configmap
+              key: some-key
+---
+# Senaryo 7: PVC Not Found
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pvc-test-1
+  namespace: ai-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pvc-test-1
+  template:
+    metadata:
+      labels:
+        app: pvc-test-1
+    spec:
+      containers:
+      - name: needs-volume
+        image: nginx
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: yok-boyle-pvc

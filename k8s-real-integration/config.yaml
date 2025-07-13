@@ -9,7 +9,7 @@ service:
 
 # OpenAI Configuration
 openai:
-  model: "gpt-4-turbo-preview"
+  model: "gpt-3.5-turbo"
   max_tokens: 2000
   temperature: 0.1
   api_key_env: "OPENAI_API_KEY"

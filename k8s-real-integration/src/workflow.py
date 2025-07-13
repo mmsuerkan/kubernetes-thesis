@@ -230,9 +230,14 @@ class ReflexiveK8sWorkflow:
         relevant_strategies = self._find_relevant_strategies(error_type, state, strategy_database)
         
         # NEW: Retrieve lessons learned from similar episodes
+        context_dict = {
+            "pod_name": state.get("pod_name", ""),
+            "namespace": state.get("namespace", "default"),
+            "error_context": state.get("analysis", {})
+        }
         similar_episodes = self.episodic_memory.get_similar_episodes(
             error_type=error_type,
-            context=state.get("pod_name", ""),
+            context=context_dict,
             limit=5
         )
         
