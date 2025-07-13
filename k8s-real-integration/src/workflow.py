@@ -272,6 +272,11 @@ class ReflexiveK8sWorkflow:
             limit=5
         )
         
+        # DEBUG: Log what we're searching for vs what we found
+        logger.info(f"🔍 DEBUG EPISODE SEARCH:")
+        logger.info(f"   🎯 Searching for error_type: '{error_type}'")
+        logger.info(f"   📋 Found {len(similar_episodes)} similar episodes")
+        
         lessons_learned = []
         for episode in similar_episodes:
             lessons_learned.extend(episode.lessons_learned)
@@ -522,11 +527,22 @@ class ReflexiveK8sWorkflow:
                     "lessons_learned": state.get("lessons_learned", [])
                 }
             else:
-                # Add lessons learned to real data
-                real_k8s_data["lessons_learned"] = state.get("lessons_learned", [])
+                # Add lessons learned to real data (ensure not None)
+                lessons = state.get("lessons_learned", []) or []
+                real_k8s_data["lessons_learned"] = lessons
             
             if use_yaml_mode:
-                # YAML Manifest Mode
+                # YAML Manifest Mode - Debug state and ensure lessons are preserved
+                logger.info(f"🔍 DEBUG STATE BEFORE YAML:")
+                logger.info(f"   📋 State keys: {list(state.keys())}")
+                logger.info(f"   📚 lessons_learned in state: {'lessons_learned' in state}")
+                if "lessons_learned" in state:
+                    logger.info(f"   📚 lessons_learned content: {state['lessons_learned'][:2] if state['lessons_learned'] else 'empty'}")
+                    real_k8s_data["lessons_learned"] = state["lessons_learned"]
+                    logger.info(f"🔄 RE-ADDED LESSONS TO YAML DATA: {len(state['lessons_learned'])} lessons")
+                else:
+                    logger.info("   ❌ lessons_learned NOT found in state!")
+                
                 logger.info("📄 GENERATING YAML MANIFEST WITH AI")
                 
                 manifest_result = await self.yaml_manifest_generator.generate_fix_manifest(

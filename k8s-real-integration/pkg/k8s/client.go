@@ -224,23 +224,7 @@ func (c *Client) GetPodErrorType(pod *v1.Pod) string {
 
 	// Check container states for specific errors
 	for _, containerStatus := range pod.Status.ContainerStatuses {
-		if containerStatus.State.Waiting != nil {
-			reason := containerStatus.State.Waiting.Reason
-			switch reason {
-			case "ImagePullBackOff", "ErrImagePull":
-				return "ImagePullBackOff"
-			case "CrashLoopBackOff":
-				return "CrashLoopBackOff"
-			case "InvalidImageName":
-				return "InvalidImageName"
-			case "CreateContainerConfigError":
-				return "CreateContainerConfigError"
-			case "CreateContainerError":
-				return "CreateContainerError"
-			case "ConfigError":
-				return "ConfigError"
-			}
-		}
+		// PRIORITY: Check Terminated state first for OOMKilled
 		if containerStatus.State.Terminated != nil {
 			// First check the Reason field - it's more reliable than exit code
 			reason := containerStatus.State.Terminated.Reason
@@ -264,6 +248,25 @@ func (c *Client) GetPodErrorType(pod *v1.Pod) string {
 					return "CrashLoopBackOff"
 				}
 			}
+		}
+		
+		if containerStatus.State.Waiting != nil {
+			reason := containerStatus.State.Waiting.Reason
+			switch reason {
+			case "ImagePullBackOff", "ErrImagePull":
+				return "ImagePullBackOff"
+			case "CrashLoopBackOff":
+				return "CrashLoopBackOff"
+			case "InvalidImageName":
+				return "InvalidImageName"
+			case "CreateContainerConfigError":
+				return "CreateContainerConfigError"
+			case "CreateContainerError":
+				return "CreateContainerError"
+			case "ConfigError":
+				return "ConfigError"
+			}
+		}
 		}
 	}
 

@@ -148,9 +148,47 @@ NOTE: This pod appears to be deployment-managed. Consider creating a Deployment 
             "annotations": current_pod_spec.get("metadata", {}).get("annotations", {}),
         }
         
-        # Get lessons learned
-        lessons = real_k8s_data.get("lessons_learned", [])
-        lessons_text = "\n".join([f"- {lesson}" for lesson in lessons]) if lessons else "None"
+        # Get lessons learned (handle None case)
+        lessons = real_k8s_data.get("lessons_learned", []) or []
+        
+        # EMERGENCY FIX: If no lessons, query episodic memory directly
+        if not lessons:
+            try:
+                from src.memory.episodic_memory import EpisodicMemoryManager
+                emergency_memory = EpisodicMemoryManager()
+                emergency_episodes = emergency_memory.get_similar_episodes(
+                    error_type=error_type,
+                    context={},
+                    limit=3
+                )
+                emergency_lessons = []
+                for episode in emergency_episodes:
+                    emergency_lessons.extend(episode.lessons_learned)
+                
+                if emergency_lessons:
+                    lessons = emergency_lessons
+                    logger.info(f"🚨 EMERGENCY LESSONS RESCUE: Found {len(lessons)} lessons via direct query")
+                    for i, lesson in enumerate(lessons[:2]):
+                        logger.info(f"   🆘 Emergency Lesson {i+1}: {lesson[:80]}...")
+            except Exception as e:
+                logger.error(f"❌ Emergency lessons query failed: {e}")
+        
+        # DEBUG: Log raw real_k8s_data to see what's actually passed
+        logger.info("🔍 DEBUG REAL_K8S_DATA:")
+        logger.info(f"   📋 Keys: {list(real_k8s_data.keys())}")
+        logger.info(f"   📚 lessons_learned type: {type(lessons)}")
+        logger.info(f"   📚 lessons_learned content: {lessons}")
+        
+        lessons_text = "\n".join([f"- {lesson}" for lesson in lessons]) if lessons else f"No previous lessons found for {error_type} errors. Using default strategy."
+        
+        # Log reflexion insights for debugging
+        logger.info("🧠 REFLEXION INSIGHTS FOR YAML GENERATION:")
+        logger.info(f"   📚 Found {len(lessons)} lessons learned from past episodes")
+        if lessons:
+            for i, lesson in enumerate(lessons[:3], 1):  # Show first 3 lessons
+                logger.info(f"   💡 Lesson {i}: {lesson[:100]}...")
+        else:
+            logger.info("   📚 No lessons learned found")
         
         human_prompt = f"""Generate a complete Kubernetes manifest to fix this error:
 
@@ -177,6 +215,13 @@ Generate a complete, fixed pod manifest that resolves the {error_type} error."""
             SystemMessage(content=system_prompt),
             HumanMessage(content=human_prompt)
         ]
+        
+        # Log the full prompt for debugging (similar to ai_command_generator)
+        logger.info("🤖 YAML GENERATION PROMPT DEBUG:")
+        logger.info("=" * 80)
+        logger.info("HUMAN MESSAGE CONTENT:")
+        logger.info(human_prompt)
+        logger.info("=" * 80)
         
         response = await self.llm.ainvoke(messages)
         
