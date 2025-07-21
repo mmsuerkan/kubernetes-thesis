@@ -55,7 +55,7 @@ class PerformanceTracker:
             conn.commit()
     
     def clear_all_metrics(self) -> bool:
-        """Clear all performance metrics"""
+        """Clear all performance metrics and history"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -64,9 +64,17 @@ class PerformanceTracker:
                 cursor.execute("DELETE FROM performance_metrics")
                 deleted_metrics = cursor.rowcount
                 
+                # Clear performance history
+                cursor.execute("DELETE FROM performance_history")
+                deleted_history = cursor.rowcount
+                
+                # Clear system performance
+                cursor.execute("DELETE FROM system_performance")
+                deleted_system = cursor.rowcount
+                
                 conn.commit()
                 
-                logger.info(f"Cleared {deleted_metrics} performance metrics")
+                logger.info(f"Cleared {deleted_metrics} performance metrics, {deleted_history} history records, {deleted_system} system records")
                 return True
                 
         except Exception as e:

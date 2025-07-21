@@ -911,11 +911,11 @@ class ReflexiveK8sWorkflow:
             if CHECKPOINT_AVAILABLE:
                 config = {
                     "configurable": {"thread_id": thread_id or f"thread_{pod_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"},
-                    "recursion_limit": 50  # Increase recursion limit
+                    "recursion_limit": 15  # Reduce recursion limit to prevent infinite loops
                 }
                 result = await self.compiled_workflow.ainvoke(initial_state, config=config)
             else:
-                config = {"recursion_limit": 50}  # Increase recursion limit
+                config = {"recursion_limit": 15}  # Reduce recursion limit to prevent infinite loops
                 result = await self.compiled_workflow.ainvoke(initial_state, config=config)
             
             # Prepare response

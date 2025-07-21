@@ -247,7 +247,7 @@ class EpisodicMemoryManager:
             return {}
     
     def clear_all_episodes(self) -> bool:
-        """Clear all episodes from database"""
+        """Clear all episodes and related data from database"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -256,9 +256,17 @@ class EpisodicMemoryManager:
                 cursor.execute("DELETE FROM episodes")
                 deleted_episodes = cursor.rowcount
                 
+                # Clear memory patterns
+                cursor.execute("DELETE FROM memory_patterns")
+                deleted_patterns = cursor.rowcount
+                
+                # Clear memory associations
+                cursor.execute("DELETE FROM memory_associations")
+                deleted_associations = cursor.rowcount
+                
                 conn.commit()
                 
-                logger.info(f"Cleared {deleted_episodes} episodes")
+                logger.info(f"Cleared {deleted_episodes} episodes, {deleted_patterns} patterns, {deleted_associations} associations")
                 return True
                 
         except Exception as e:

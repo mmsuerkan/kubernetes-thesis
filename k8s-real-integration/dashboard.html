@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K8s AI Auto-Fix Agent Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+        }
+
+        .card h3 {
+            color: #4a5568;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 8px 0;
+        }
+
+        .metric-label {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .metric-value {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online { background-color: #48bb78; }
+        .status-offline { background-color: #f56565; }
+        .status-warning { background-color: #ed8936; }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4299e1, #667eea);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .logs-container {
+            background: #1a202c;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+        }
+
+        .log-info { color: #63b3ed; }
+        .log-success { color: #68d391; }
+        .log-warning { color: #fbd38d; }
+        .log-error { color: #fc8181; }
+
+        .chart-container {
+            width: 100%;
+            height: 200px;
+            margin: 15px 0;
+            background: #f7fafc;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #718096;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 50%;
+            border-top-color: #4299e1;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-size: 0.9rem;
+        }
+
+        .alert-success {
+            background-color: #f0fff4;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alert-warning {
+            background-color: #fffbf0;
+            color: #744210;
+            border: 1px solid #f6e05e;
+        }
+
+        .alert-error {
+            background-color: #fff5f5;
+            color: #742a2a;
+            border: 1px solid #feb2b2;
+        }
+
+        /* Reset confirmation modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 30px;
+            border: none;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal h2 {
+            color: #e53e3e;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+
+        .modal p {
+            margin: 15px 0;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+
+        .modal-buttons {
+            margin-top: 25px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #e53e3e, #c53030);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(229, 62, 62, 0.3);
+        }
+
+        .btn-cancel {
+            background: #e2e8f0;
+            color: #4a5568;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-cancel:hover {
+            background: #cbd5e0;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🤖 K8s AI Auto-Fix Agent</h1>
+            <p>Kubernetes Hata Çözüm Sistemi Dashboard</p>
+        </header>
+
+        <!-- Status Overview -->
+        <div class="grid">
+            <div class="card">
+                <h3>🔍 Sistem Durumu</h3>
+                <div class="metric">
+                    <span class="metric-label">
+                        <span id="backend-status" class="status-indicator status-offline"></span>
+                        Backend API
+                    </span>
+                    <span id="backend-status-text" class="metric-value">Bağlanıyor...</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">
+                        <span id="go-service-status" class="status-indicator status-offline"></span>
+                        Go Watcher Service
+                    </span>
+                    <span id="go-service-status-text" class="metric-value">Bilinmiyor</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">OpenAI Bağlantısı</span>
+                    <span id="openai-status" class="metric-value">Kontrol ediliyor...</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📊 Hızlı İstatistikler</h3>
+                <div class="metric">
+                    <span class="metric-label">Toplam Çözülen Hatalar</span>
+                    <span id="total-resolved" class="metric-value">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Başarı Oranı</span>
+                    <span id="success-rate" class="metric-value">0%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Öğrenilen Stratejiler</span>
+                    <span id="strategies-count" class="metric-value">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Ortalama Çözüm Süresi</span>
+                    <span id="avg-resolution-time" class="metric-value">0s</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>🧠 AI Öğrenme Durumu</h3>
+                <div class="metric">
+                    <span class="metric-label">Öğrenme Hızı</span>
+                    <span id="learning-velocity" class="metric-value">0.0</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="learning-progress" class="progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Self-Awareness Seviyesi</span>
+                    <span id="self-awareness" class="metric-value">0.0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Hafıza Kullanımı</span>
+                    <span id="memory-utilization" class="metric-value">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Controls -->
+        <div class="grid">
+            <div class="card">
+                <h3>🧪 Test Kontrolleri</h3>
+                <button class="btn" onclick="triggerImagePullTest()">
+                    ImagePullBackOff Testi
+                </button>
+                <button class="btn" onclick="triggerCrashLoopTest()">
+                    CrashLoop Testi
+                </button>
+                <button class="btn" onclick="triggerOOMTest()">
+                    OOMKilled Testi
+                </button>
+                <button class="btn" onclick="refreshData()">
+                    🔄 Verileri Yenile
+                </button>
+                <button class="btn" onclick="cleanupTestPods()">
+                    🧹 Test Pod'larını Temizle
+                </button>
+                <button class="btn" onclick="showResetConfirmation()" style="background: linear-gradient(135deg, #ff6b6b, #ee5a52); margin-top: 10px;">
+                    🚨 Sistemi Sıfırla
+                </button>
+                <div id="test-results" class="alert" style="display: none;"></div>
+            </div>
+
+            <div class="card">
+                <h3>📈 Son Performans & Detaylar</h3>
+                
+                <!-- Performance visualization -->
+                <div class="metric">
+                    <span class="metric-label">Success Rate Trend</span>
+                    <div class="progress-bar">
+                        <div id="success-trend" class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <span id="success-trend-text" class="metric-value">0% (trend)</span>
+                </div>
+                
+                <div class="metric">
+                    <span class="metric-label">Son 24 Saat Aktivite</span>
+                    <span id="recent-activity" class="metric-value">0 işlem</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Reflection Kalitesi</span>
+                    <span id="reflection-quality" class="metric-value">0.0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Keşfedilen Paternler</span>
+                    <span id="patterns-discovered" class="metric-value">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Oluşturulan Bağlantılar</span>
+                    <span id="associations-formed" class="metric-value">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Ortalama İçgörü</span>
+                    <span id="avg-insights" class="metric-value">0.0</span>
+                </div>
+                
+                <!-- Strategy effectiveness breakdown -->
+                <div class="metric">
+                    <span class="metric-label">En Başarılı Hata Türü</span>
+                    <span id="top-error-type" class="metric-value">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Logs -->
+        <div class="card">
+            <h3>📋 Canlı Sistem Logları</h3>
+            <button class="btn" onclick="toggleLogStream()">
+                <span id="log-toggle-text">Logları Başlat</span>
+            </button>
+            <button class="btn" onclick="clearLogs()">Logları Temizle</button>
+            
+            <div id="logs" class="logs-container">
+                <div class="log-entry log-info">🚀 Dashboard başlatıldı</div>
+                <div class="log-entry log-info">📡 Backend bağlantısı kontrol ediliyor...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Confirmation Modal -->
+    <div id="resetModal" class="modal">
+        <div class="modal-content">
+            <h2>🚨 Sistem Reset Onayı</h2>
+            <p><strong>Dikkat!</strong> Bu işlem geri alınamaz.</p>
+            <p>Tüm AI öğrenme verileri kalıcı olarak silinecek:</p>
+            <ul style="text-align: left; margin: 20px 0; padding-left: 40px;">
+                <li><strong>Strategy Database</strong> - Öğrenilen tüm stratejiler</li>
+                <li><strong>Episodic Memory</strong> - Tüm çözüm geçmişi</li>
+                <li><strong>Performance Tracker</strong> - Performans metrikleri</li>
+            </ul>
+            <p>AI sistemi sıfırdan öğrenmeye başlayacak.</p>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="hideResetConfirmation()">İptal</button>
+                <button class="btn-danger" onclick="confirmSystemReset()">Evet, Sıfırla</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let logStreamInterval = null;
+        let dataRefreshInterval = null;
+        const API_BASE = 'http://localhost:8000';
+        
+        // Detect if running via proxy server or directly
+        const isProxyMode = window.location.port === '3000';
+        const GO_SERVICE_BASE = isProxyMode ? '/go' : 'http://localhost:8080';
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            addLog('✅ Dashboard yüklendi', 'success');
+            checkSystemHealth();
+            loadInitialData();
+            startAutoRefresh();
+        });
+
+        // Add log entry
+        function addLog(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString('tr-TR');
+            const logClass = `log-${type}`;
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${logClass}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+
+            // Keep only last 100 logs
+            const entries = logs.getElementsByClassName('log-entry');
+            if (entries.length > 100) {
+                logs.removeChild(entries[0]);
+            }
+        }
+
+        // Check system health
+        async function checkSystemHealth() {
+            try {
+                // Check FastAPI backend
+                const healthResponse = await fetch(`${API_BASE}/health`);
+                if (healthResponse.ok) {
+                    document.getElementById('backend-status').className = 'status-indicator status-online';
+                    document.getElementById('backend-status-text').textContent = 'Çevrimiçi';
+                    addLog('✅ FastAPI backend bağlantısı başarılı', 'success');
+                    
+                    // Check OpenAI status
+                    try {
+                        const openaiResponse = await fetch(`${API_BASE}/api/v1/debug/openai-status`);
+                        if (openaiResponse.ok) {
+                            const openaiData = await openaiResponse.json();
+                            const isConfigured = openaiData.configured || openaiData.api_key_exists || openaiData.openai_test === 'success';
+                            document.getElementById('openai-status').textContent = 
+                                isConfigured ? '✅ Aktif' : '❌ API Key Eksik';
+                            if (isConfigured) {
+                                addLog('✅ OpenAI API bağlantısı aktif', 'success');
+                            } else {
+                                addLog('⚠️ OpenAI API key eksik veya geçersiz', 'warning');
+                            }
+                        }
+                    } catch (openaiError) {
+                        document.getElementById('openai-status').textContent = '❌ Kontrol Edilemiyor';
+                        addLog('⚠️ OpenAI durumu kontrol edilemedi', 'warning');
+                    }
+                } else {
+                    throw new Error('Backend unreachable');
+                }
+            } catch (error) {
+                document.getElementById('backend-status').className = 'status-indicator status-offline';
+                document.getElementById('backend-status-text').textContent = 'Çevrimdışı';
+                document.getElementById('openai-status').textContent = 'Bağlantı Yok';
+                addLog('❌ Backend bağlantısı başarısız: ' + error.message, 'error');
+            }
+
+            // Check Go Watcher Service
+            try {
+                addLog('🔍 Go Watcher Service kontrol ediliyor...', 'info');
+                const goHealthResponse = await fetch(`${GO_SERVICE_BASE}/api/v1/health`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                addLog(`📡 Go Service yanıt durumu: ${goHealthResponse.status}`, 'info');
+                
+                if (goHealthResponse.ok) {
+                    const goHealthData = await goHealthResponse.json();
+                    document.getElementById('go-service-status').className = 'status-indicator status-online';
+                    document.getElementById('go-service-status-text').textContent = 'Çevrimiçi';
+                    addLog(`✅ Go Watcher Service aktif - ${goHealthData.service || goHealthData.status || 'OK'}`, 'success');
+                } else {
+                    throw new Error(`HTTP ${goHealthResponse.status}: ${goHealthResponse.statusText}`);
+                }
+            } catch (goError) {
+                document.getElementById('go-service-status').className = 'status-indicator status-offline';
+                document.getElementById('go-service-status-text').textContent = 'Çevrimdışı';
+                addLog('❌ Go Watcher Service bağlantısı başarısız: ' + goError.message, 'error');
+                
+                // Debug info
+                if (goError.message.includes('CORS')) {
+                    addLog('💡 CORS hatası: Go service CORS desteği eksik olabilir', 'warning');
+                } else if (goError.message.includes('fetch')) {
+                    addLog('💡 Network hatası: Port 8080 erişilebilir mi?', 'warning');
+                }
+            }
+        }
+
+        // Load initial dashboard data
+        async function loadInitialData() {
+            try {
+                // Load memory statistics
+                const statsResponse = await fetch(`${API_BASE}/api/v1/memory/statistics`);
+                if (statsResponse.ok) {
+                    const stats = await statsResponse.json();
+                    updateStatistics(stats);
+                    
+                    // Log detailed statistics
+                    const episodes = stats.episodic_memory?.total_episodes || 0;
+                    const strategies = stats.strategy_database?.total_strategies || 0;
+                    const successRate = stats.performance_summary?.success_rate || 0;
+                    
+                    addLog(`📊 İstatistikler güncellendi: ${episodes} episode, ${strategies} strateji, %${Math.round(successRate * 100)} başarı`, 'info');
+                    
+                    // Log top performing strategy if available
+                    if (stats.strategy_database?.top_strategies && stats.strategy_database.top_strategies.length > 0) {
+                        const topStrategy = stats.strategy_database.top_strategies[0];
+                        addLog(`🏆 En başarılı strateji: ${topStrategy.id} (%${Math.round(topStrategy.success_rate * 100)} başarı, ${topStrategy.usage_count} kullanım)`, 'success');
+                    }
+                }
+
+                // Load strategies - already handled in statistics
+                // This is now handled by updateStatistics function
+
+                // Load recent episodes
+                const episodesResponse = await fetch(`${API_BASE}/api/v1/memory/episodes?limit=10`);
+                if (episodesResponse.ok) {
+                    const episodes = await episodesResponse.json();
+                    updateRecentActivity(episodes.length);
+                }
+
+            } catch (error) {
+                addLog('⚠️ Veri yükleme hatası: ' + error.message, 'warning');
+            }
+        }
+
+        // Update statistics display
+        function updateStatistics(stats) {
+            // Episodic Memory Stats
+            if (stats.episodic_memory) {
+                document.getElementById('total-resolved').textContent = 
+                    stats.episodic_memory.total_episodes || 0;
+                
+                const successRate = stats.performance_summary?.success_rate || 0;
+                document.getElementById('success-rate').textContent = 
+                    Math.round(successRate * 100) + '%';
+                    
+                const avgTime = stats.performance_summary?.avg_resolution_time || 0;
+                document.getElementById('avg-resolution-time').textContent = 
+                    avgTime.toFixed(1) + 's';
+            }
+
+            // Strategy Database Stats
+            if (stats.strategy_database) {
+                document.getElementById('strategies-count').textContent = 
+                    stats.strategy_database.total_strategies || 0;
+            }
+
+            // AI Learning Metrics
+            if (stats.episodic_memory) {
+                const reflectionQuality = stats.episodic_memory.avg_reflection_quality || 0;
+                document.getElementById('learning-velocity').textContent = 
+                    reflectionQuality.toFixed(3);
+                    
+                document.getElementById('learning-progress').style.width = 
+                    Math.min(100, reflectionQuality * 100) + '%';
+                
+                const selfAwareness = Math.min(1.0, 
+                    (reflectionQuality * 0.6) + 
+                    (stats.episodic_memory.avg_insights_generated / 5 * 0.4)
+                );
+                document.getElementById('self-awareness').textContent = 
+                    selfAwareness.toFixed(2);
+            }
+
+            // Memory utilization based on episodes and patterns
+            const maxEpisodes = 1000; // Assuming max capacity
+            const episodes = stats.episodic_memory?.total_episodes || 0;
+            const patterns = stats.episodic_memory?.patterns_discovered || 0;
+            const memoryUtil = Math.min(100, (episodes + patterns * 2) / maxEpisodes * 100);
+            document.getElementById('memory-utilization').textContent = memoryUtil.toFixed(1) + '%';
+            
+            // Update recent activity with more detailed info
+            const recent24h = stats.strategy_database?.recent_usage_24h || 0;
+            const totalProcessed = stats.performance_summary?.total_processed || 0;
+            document.getElementById('recent-activity').textContent = 
+                `${recent24h} strateji kullanımı (toplam ${totalProcessed})`;
+            
+            // Update detailed AI metrics
+            if (stats.episodic_memory) {
+                document.getElementById('reflection-quality').textContent = 
+                    (stats.episodic_memory.avg_reflection_quality || 0).toFixed(3);
+                    
+                document.getElementById('patterns-discovered').textContent = 
+                    stats.episodic_memory.patterns_discovered || 0;
+                    
+                document.getElementById('associations-formed').textContent = 
+                    stats.episodic_memory.associations_formed || 0;
+                    
+                document.getElementById('avg-insights').textContent = 
+                    (stats.episodic_memory.avg_insights_generated || 0).toFixed(1);
+            }
+            
+            // Update performance trends and strategy effectiveness
+            if (stats.performance_summary && stats.strategy_database) {
+                const successRate = stats.performance_summary.success_rate || 0;
+                document.getElementById('success-trend').style.width = `${successRate * 100}%`;
+                document.getElementById('success-trend-text').textContent = 
+                    `${Math.round(successRate * 100)}% (trend)`;
+                
+                // Find most successful error type
+                if (stats.strategy_database.success_by_error_type) {
+                    const errorTypes = stats.strategy_database.success_by_error_type;
+                    let topErrorType = '';
+                    let topSuccessRate = 0;
+                    
+                    for (const [errorType, rate] of Object.entries(errorTypes)) {
+                        if (rate > topSuccessRate) {
+                            topSuccessRate = rate;
+                            topErrorType = errorType;
+                        }
+                    }
+                    
+                    if (topErrorType) {
+                        document.getElementById('top-error-type').textContent = 
+                            `${topErrorType} (%${Math.round(topSuccessRate * 100)})`;
+                    }
+                }
+            }
+        }
+
+        // Update recent activity
+        function updateRecentActivity(count) {
+            document.getElementById('recent-activity').textContent = `${count} işlem`;
+        }
+
+        // Test functions
+        async function triggerImagePullTest() {
+            showTestResult('ImagePullBackOff test başlatılıyor...', 'info');
+            addLog('🧪 ImagePullBackOff test tetikleniyor', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/tests/trigger`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        test_type: 'imagepull',
+                        namespace: 'default'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.yaml_applied) {
+                        showTestResult(`✅ ${data.message}`, 'success');
+                        addLog(`✅ ImagePullBackOff test pod oluşturuldu: ${data.pod_name}`, 'success');
+                        
+                        // Monitor test progress
+                        monitorTestProgress('imagepull', data.pod_name);
+                    } else {
+                        showTestResult(`❌ Test başarısız: ${data.message}`, 'error');
+                        addLog(`❌ ImagePullBackOff test hatası: ${data.message}`, 'error');
+                    }
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                showTestResult('❌ Test API hatası: ' + error.message, 'error');
+                addLog('❌ ImagePullBackOff test API hatası: ' + error.message, 'error');
+            }
+        }
+
+        async function triggerCrashLoopTest() {
+            showTestResult('CrashLoop test başlatılıyor...', 'info');
+            addLog('🧪 CrashLoop test tetikleniyor', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/tests/trigger`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        test_type: 'crashloop',
+                        namespace: 'default'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.yaml_applied) {
+                        showTestResult(`✅ ${data.message}`, 'success');
+                        addLog(`✅ CrashLoop test pod oluşturuldu: ${data.pod_name}`, 'success');
+                        
+                        // Monitor test progress
+                        monitorTestProgress('crashloop', data.pod_name);
+                    } else {
+                        showTestResult(`❌ Test başarısız: ${data.message}`, 'error');
+                        addLog(`❌ CrashLoop test hatası: ${data.message}`, 'error');
+                    }
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                showTestResult('❌ Test API hatası: ' + error.message, 'error');
+                addLog('❌ CrashLoop test API hatası: ' + error.message, 'error');
+            }
+        }
+
+        async function triggerOOMTest() {
+            showTestResult('OOMKilled test başlatılıyor...', 'info');
+            addLog('🧪 OOMKilled test tetikleniyor', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/tests/trigger`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        test_type: 'oom',
+                        namespace: 'default'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.yaml_applied) {
+                        showTestResult(`✅ ${data.message}`, 'success');
+                        addLog(`✅ OOM test pod oluşturuldu: ${data.pod_name}`, 'success');
+                        
+                        // Monitor test progress
+                        monitorTestProgress('oom', data.pod_name);
+                    } else {
+                        showTestResult(`❌ Test başarısız: ${data.message}`, 'error');
+                        addLog(`❌ OOM test hatası: ${data.message}`, 'error');
+                    }
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                showTestResult('❌ Test API hatası: ' + error.message, 'error');
+                addLog('❌ OOM test API hatası: ' + error.message, 'error');
+            }
+        }
+
+        // Monitor test progress
+        async function monitorTestProgress(testType, podName) {
+            addLog(`📊 ${testType} test durumu izleniyor...`, 'info');
+            
+            let attempts = 0;
+            const maxAttempts = 12; // 2 minutes of monitoring
+            
+            const monitor = setInterval(async () => {
+                attempts++;
+                
+                try {
+                    const response = await fetch(`${API_BASE}/api/v1/tests/status/${testType}`);
+                    if (response.ok) {
+                        const statusData = await response.json();
+                        const testPods = statusData.pods.filter(pod => pod.name.includes(testType));
+                        
+                        if (testPods.length > 0) {
+                            const pod = testPods[0];
+                            addLog(`📈 Test pod ${pod.name}: ${pod.phase} (Restarts: ${pod.restarts})`, 'info');
+                            
+                            // Check if test is showing the error we expect
+                            if (testType === 'imagepull' && pod.phase === 'Pending' && pod.restarts === 0) {
+                                addLog('🎯 ImagePullBackOff hatası bekleniyor...', 'warning');
+                            } else if (testType === 'crashloop' && pod.restarts > 0) {
+                                addLog('🎯 CrashLoopBackOff tetiklendi - AI çözüm süreci başlayacak!', 'warning');
+                                clearInterval(monitor);
+                                return;
+                            } else if (testType === 'oom' && pod.phase === 'Failed') {
+                                addLog('🎯 OOMKilled tetiklendi - AI çözüm süreci başlayacak!', 'warning');
+                                clearInterval(monitor);
+                                return;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    addLog(`⚠️ Test monitoring hatası: ${error.message}`, 'warning');
+                }
+                
+                if (attempts >= maxAttempts) {
+                    clearInterval(monitor);
+                    addLog(`⏰ Test monitoring tamamlandı (${attempts} kontrol)`, 'info');
+                }
+            }, 10000); // Check every 10 seconds
+        }
+
+        // Cleanup test pods
+        async function cleanupTestPods() {
+            console.log('🧹 Starting cleanup process...');
+            addLog('🧹 Test pod\'ları temizleniyor...', 'info');
+            showTestResult('Test pod\'ları temizleniyor...', 'info');
+            
+            const testTypes = ['imagepull', 'crashloop', 'oom'];
+            let cleanedCount = 0;
+            
+            for (const testType of testTypes) {
+                try {
+                    console.log(`🧹 Cleaning up ${testType} test pods...`);
+                    const response = await fetch(`${API_BASE}/api/v1/tests/cleanup/${testType}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    console.log(`🧹 Response for ${testType}:`, response.status, response.ok);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log(`🧹 Data for ${testType}:`, data);
+                        if (data.success) {
+                            cleanedCount++;
+                            addLog(`✅ ${testType} test pod'ları temizlendi`, 'success');
+                        } else {
+                            addLog(`⚠️ ${testType} temizleme hatası: ${data.error || 'Bilinmiyor'}`, 'warning');
+                        }
+                    } else {
+                        addLog(`❌ ${testType} temizleme API hatası: ${response.status}`, 'error');
+                    }
+                } catch (error) {
+                    console.error(`🧹 Cleanup error for ${testType}:`, error);
+                    addLog(`❌ ${testType} temizleme bağlantı hatası: ${error.message}`, 'error');
+                }
+            }
+            
+            if (cleanedCount > 0) {
+                showTestResult(`✅ ${cleanedCount} test türü temizlendi`, 'success');
+                addLog(`🎉 Temizlik tamamlandı: ${cleanedCount}/${testTypes.length} test türü`, 'success');
+            } else {
+                showTestResult('⚠️ Hiçbir test pod\'u temizlenemedi', 'warning');
+                addLog('⚠️ Test pod temizleme işlemi başarısız', 'warning');
+            }
+        }
+
+        // Show test result
+        function showTestResult(message, type) {
+            const resultDiv = document.getElementById('test-results');
+            resultDiv.className = `alert alert-${type}`;
+            resultDiv.textContent = message;
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                resultDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Toggle log streaming
+        function toggleLogStream() {
+            const toggleText = document.getElementById('log-toggle-text');
+            
+            if (logStreamInterval) {
+                clearInterval(logStreamInterval);
+                logStreamInterval = null;
+                toggleText.textContent = 'Logları Başlat';
+                addLog('⏸️ Log akışı durduruldu', 'warning');
+            } else {
+                logStreamInterval = setInterval(realTimeLogStream, 5000);  // Check every 5 seconds
+                toggleText.textContent = 'Logları Durdur';
+                addLog('▶️ Gerçek zamanlı log akışı başlatıldı', 'success');
+            }
+        }
+
+        // Real-time log streaming from system
+        async function realTimeLogStream() {
+            try {
+                // Get recent activities from multiple sources
+                await fetchRecentActivities();
+                await fetchSystemMetrics();
+                await fetchRecentStrategies();
+            } catch (error) {
+                // Fallback to informational messages if APIs fail
+                const messages = [
+                    '🔍 Kubernetes cluster durumu kontrol ediliyor',
+                    '📊 AI performans metrikleri güncellendirildi',
+                    '🧠 Reflexion stratejileri değerlendiriliyor',
+                    '💾 Episodic memory güncellemesi',
+                    '🎯 Self-awareness seviyesi hesaplanıyor'
+                ];
+                
+                const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+                addLog(randomMessage, 'info');
+            }
+        }
+
+        async function fetchRecentActivities() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/memory/episodes?limit=1`);
+                if (response.ok) {
+                    const episodes = await response.json();
+                    if (episodes.length > 0) {
+                        const latest = episodes[0];
+                        const timeAgo = new Date(latest.timestamp);
+                        const minutes = Math.floor((Date.now() - timeAgo.getTime()) / 60000);
+                        if (minutes < 5) {  // Only log very recent activity
+                            addLog(`🔄 Son episode: ${latest.error_type} hatası ${minutes}dk önce işlendi`, 'info');
+                        }
+                    }
+                }
+            } catch (error) {
+                // Silent fail - normal operation
+            }
+        }
+
+        async function fetchSystemMetrics() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/memory/performance?days=1`);
+                if (response.ok) {
+                    const perf = await response.json();
+                    if (perf.recent_improvements && perf.recent_improvements.length > 0) {
+                        const improvement = perf.recent_improvements[0];
+                        addLog(`📈 Performans artışı: ${improvement.strategy_type} %${Math.round(improvement.improvement * 100)} iyileşti`, 'success');
+                    }
+                }
+            } catch (error) {
+                // Silent fail
+            }
+        }
+
+        async function fetchRecentStrategies() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/memory/strategies?recent=true`);
+                if (response.ok) {
+                    const strategies = await response.json();
+                    // Log only if there are newly used strategies
+                    const recentCount = strategies.filter(s => s.last_used_recent).length;
+                    if (recentCount > 0) {
+                        addLog(`🧠 ${recentCount} strateji son 10 dakikada kullanıldı`, 'info');
+                    }
+                }
+            } catch (error) {
+                // Silent fail
+            }
+        }
+
+        // Clear logs
+        function clearLogs() {
+            const logs = document.getElementById('logs');
+            logs.innerHTML = '<div class="log-entry log-info">📋 Loglar temizlendi</div>';
+        }
+
+        // Refresh data
+        async function refreshData() {
+            addLog('🔄 Veriler yenileniyor...', 'info');
+            await checkSystemHealth();
+            await loadInitialData();
+            addLog('✅ Veriler güncellendi', 'success');
+        }
+
+        // Start auto refresh
+        function startAutoRefresh() {
+            dataRefreshInterval = setInterval(async () => {
+                await checkSystemHealth();
+                await loadInitialData();
+            }, 30000); // Refresh every 30 seconds
+        }
+
+        // Reset system functions
+        function showResetConfirmation() {
+            const modal = document.getElementById('resetModal');
+            modal.style.display = 'block';
+            addLog('⚠️ Sistem reset onay ekranı açıldı', 'warning');
+        }
+
+        function hideResetConfirmation() {
+            const modal = document.getElementById('resetModal');
+            modal.style.display = 'none';
+            addLog('ℹ️ Sistem reset iptal edildi', 'info');
+        }
+
+        async function confirmSystemReset() {
+            const modal = document.getElementById('resetModal');
+            modal.style.display = 'none';
+            
+            addLog('🚨 SİSTEM RESET BAŞLATILIYOR - Tüm AI verileri silinecek!', 'error');
+            showTestResult('Sistem resetleniyor, lütfen bekleyin...', 'warning');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/memory/reset-nuclear`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        addLog(`✅ SİSTEM BAŞARIYLA RESETLENDI!`, 'success');
+                        addLog(`📊 Temizlenen veriler: ${data.total_items_cleared} öğe`, 'success');
+                        addLog(`🔄 ${data.systems_reset}/${data.total_systems} sistem resetlendi`, 'success');
+                        
+                        // Log details for each system
+                        if (data.reset_details) {
+                            for (const [system, details] of Object.entries(data.reset_details)) {
+                                if (details.success) {
+                                    addLog(`✅ ${system}: ${details.message}`, 'success');
+                                } else {
+                                    addLog(`❌ ${system}: ${details.error || 'Reset başarısız'}`, 'error');
+                                }
+                            }
+                        }
+                        
+                        addLog('🎯 AI sistemi sıfırdan öğrenmeye hazır!', 'success');
+                        showTestResult(`✅ Sistem reset tamamlandı! ${data.total_items_cleared} öğe temizlendi.`, 'success');
+                        
+                        // Refresh data after reset
+                        setTimeout(async () => {
+                            addLog('🔄 Veriler yenileniyor...', 'info');
+                            await loadInitialData();
+                            addLog('✅ Fresh start - Sistem sıfırlandı', 'success');
+                        }, 2000);
+                        
+                    } else {
+                        addLog(`⚠️ KISMİ RESET: ${data.message}`, 'warning');
+                        showTestResult(`⚠️ ${data.message}`, 'warning');
+                        
+                        // Show failed systems
+                        if (data.reset_details) {
+                            for (const [system, details] of Object.entries(data.reset_details)) {
+                                if (!details.success) {
+                                    addLog(`❌ ${system} resetlenemedi: ${details.error}`, 'error');
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+            } catch (error) {
+                addLog(`❌ SİSTEM RESET BAŞARISIZ: ${error.message}`, 'error');
+                showTestResult(`❌ Reset başarısız: ${error.message}`, 'error');
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('resetModal');
+            if (event.target === modal) {
+                hideResetConfirmation();
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (logStreamInterval) clearInterval(logStreamInterval);
+            if (dataRefreshInterval) clearInterval(dataRefreshInterval);
+        });
+    </script>
+</body>
+</html>

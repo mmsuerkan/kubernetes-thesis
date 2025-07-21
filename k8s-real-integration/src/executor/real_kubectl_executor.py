@@ -240,73 +240,89 @@ class RealKubectlExecutor:
                 
                 # Command'ı parçalara ayır
                 cmd_parts = command.split()
+                logger.info(f"🔍 PRE-EXEC DEBUG: cmd_parts={cmd_parts}")
                 
-                # subprocess ile çalıştır
-                process = await asyncio.create_subprocess_exec(
-                    *cmd_parts,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    limit=1024*1024  # 1MB limit
-                )
-                
+                # Windows asyncio subprocess workaround - use sync subprocess
+                import subprocess
                 try:
-                    stdout, stderr = await asyncio.wait_for(
-                        process.communicate(), 
+                    logger.info(f"🔍 USING SYNC SUBPROCESS: {cmd_parts}")
+                    process_result = subprocess.run(
+                        cmd_parts,
+                        capture_output=True,
                         timeout=self.timeout
                     )
-                    
-                    execution_time = (datetime.now() - start_time).total_seconds()
-                    
+                    stdout = process_result.stdout
+                    stderr = process_result.stderr
+                    returncode = process_result.returncode
+                    logger.info(f"🔍 PROCESS COMPLETED: returncode={returncode}")
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"⏰ SUBPROCESS TIMEOUT: {e}")
+                    raise asyncio.TimeoutError(f"Command timed out: {command}")
+                except Exception as e:
+                    logger.error(f"💥 SUBPROCESS FAILED: {e}")
+                    raise
+                
+                execution_time = (datetime.now() - start_time).total_seconds()
+                
+                # Better Windows encoding handling
+                try:
                     stdout_str = stdout.decode('utf-8', errors='replace')
+                except:
+                    stdout_str = stdout.decode('cp1252', errors='replace')
+                    
+                try:
                     stderr_str = stderr.decode('utf-8', errors='replace')
+                except:
+                    stderr_str = stderr.decode('cp1252', errors='replace')
+                
+                # Debug: Log detailed execution info
+                logger.info(f"🔍 KUBECTL DEBUG: Command='{command}' ReturnCode={returncode}")
+                logger.info(f"🔍 KUBECTL DEBUG: STDOUT_LEN={len(stdout_str)} STDERR_LEN={len(stderr_str)}")
+                logger.info(f"🔍 KUBECTL DEBUG: STDOUT='{stdout_str[:100]}...' STDERR='{stderr_str[:100]}...'")
+                
+                # Debug: Log raw bytes if stderr is problematic
+                if returncode != 0 and not stderr_str.strip():
+                    logger.warning(f"🐛 DEBUG: Raw stderr bytes: {stderr!r}")
+                    logger.warning(f"🐛 DEBUG: Raw stdout bytes: {stdout!r}")
+                elif returncode == 0 and not stdout_str.strip() and not stderr_str.strip():
+                    logger.info(f"🔍 KUBECTL SUCCESS: Command successful with no output (normal for --ignore-not-found)")
+                
+                result = ExecutionResult(
+                    success=returncode == 0,
+                    stdout=stdout_str,
+                    stderr=stderr_str,
+                    exit_code=returncode,
+                    execution_time=execution_time,
+                    command=command,
+                    timestamp=start_time
+                )
+                
+                if result.success:
+                    logger.info(f"✅ COMMAND SUCCESS: {command}")
+                    logger.info(f"   Execution time: {execution_time:.2f}s")
+                    if stdout_str:
+                        logger.info(f"   Output: {stdout_str[:200]}...")
+                else:
+                    logger.error(f"❌ COMMAND FAILED: {command}")
+                    logger.error(f"   Exit code: {returncode}")
+                    logger.error(f"   Error: {stderr_str}")
                     
-                    result = ExecutionResult(
-                        success=process.returncode == 0,
-                        stdout=stdout_str,
-                        stderr=stderr_str,
-                        exit_code=process.returncode,
-                        execution_time=execution_time,
-                        command=command,
-                        timestamp=start_time
-                    )
-                    
-                    if result.success:
-                        logger.info(f"✅ COMMAND SUCCESS: {command}")
-                        logger.info(f"   Execution time: {execution_time:.2f}s")
-                        if stdout_str:
-                            logger.info(f"   Output: {stdout_str[:200]}...")
-                    else:
-                        logger.error(f"❌ COMMAND FAILED: {command}")
-                        logger.error(f"   Exit code: {process.returncode}")
-                        logger.error(f"   Error: {stderr_str}")
-                        
-                        # Retry logic
-                        if retry_on_failure and retry_count < self.max_retries:
-                            retry_count += 1
-                            logger.info(f"🔄 RETRYING ({retry_count}/{self.max_retries}): {command}")
-                            await asyncio.sleep(2 ** retry_count)  # Exponential backoff
-                            continue
-                    
-                    return result
-                    
-                except asyncio.TimeoutError:
-                    logger.error(f"⏰ COMMAND TIMEOUT ({self.timeout}s): {command}")
-                    process.kill()
-                    await process.wait()
-                    
-                    return ExecutionResult(
-                        success=False,
-                        stdout="",
-                        stderr=f"Command timed out after {self.timeout} seconds",
-                        exit_code=-2,
-                        execution_time=self.timeout,
-                        command=command,
-                        timestamp=start_time
-                    )
+                    # Retry logic
+                    if retry_on_failure and retry_count < self.max_retries:
+                        retry_count += 1
+                        logger.info(f"🔄 RETRYING ({retry_count}/{self.max_retries}): {command}")
+                        await asyncio.sleep(2 ** retry_count)  # Exponential backoff
+                        continue
+                
+                return result
                     
             except Exception as e:
                 logger.error(f"💥 COMMAND EXECUTION ERROR: {command}")
-                logger.error(f"   Error: {str(e)}")
+                logger.error(f"   Error Type: {type(e).__name__}")
+                logger.error(f"   Error Message: {str(e)}")
+                logger.error(f"   Retry Count: {retry_count}/{self.max_retries}")
+                import traceback
+                logger.error(f"   Stack Trace: {traceback.format_exc()}")
                 
                 if retry_on_failure and retry_count < self.max_retries:
                     retry_count += 1

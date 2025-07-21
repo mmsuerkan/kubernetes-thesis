@@ -264,7 +264,7 @@ class StrategyDatabase:
             return False
     
     def clear_all_strategies(self) -> bool:
-        """Clear all strategies from database"""
+        """Clear all strategies and related data from database"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -277,9 +277,13 @@ class StrategyDatabase:
                 cursor.execute("DELETE FROM strategy_usage")
                 deleted_usage = cursor.rowcount
                 
+                # Clear evolution history
+                cursor.execute("DELETE FROM strategy_evolution")
+                deleted_evolution = cursor.rowcount
+                
                 conn.commit()
                 
-                logger.info(f"Cleared {deleted_strategies} strategies and {deleted_usage} usage records")
+                logger.info(f"Cleared {deleted_strategies} strategies, {deleted_usage} usage records, {deleted_evolution} evolution records")
                 return True
                 
         except Exception as e:

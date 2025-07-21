@@ -328,8 +328,9 @@ async def process_pod_error_with_real_data(request: GoServiceErrorRequest):
             "workflow_id": f"go_integration_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         }
         
-        # Process through reflexive workflow
-        result = await workflow_instance.compiled_workflow.ainvoke(initial_state)
+        # Process through reflexive workflow with limited recursion
+        config = {"recursion_limit": 15}  # Reduce recursion limit to prevent infinite loops
+        result = await workflow_instance.compiled_workflow.ainvoke(initial_state, config=config)
         
         # Prepare response
         response = {
@@ -601,6 +602,175 @@ async def clear_episodic_memory():
     except Exception as e:
         logger.error("Failed to clear episodic memory", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to clear episodic memory: {str(e)}")
+
+@app.post("/api/v1/memory/reset-nuclear") 
+async def reset_nuclear_option():
+    """NUCLEAR OPTION: Delete database files and reinitialize everything"""
+    import os
+    global strategy_db, episodic_memory, performance_tracker
+    
+    try:
+        logger.warning("🔥 NUCLEAR RESET INITIATED - Deleting all database files!")
+        
+        # Database file paths
+        db_files = [
+            "reflexion_strategies.db",
+            "reflexion_episodes.db", 
+            "reflexion_performance.db",
+            "reflexion_memory.json"
+        ]
+        
+        deleted_files = 0
+        for db_file in db_files:
+            try:
+                if os.path.exists(db_file):
+                    os.remove(db_file)
+                    deleted_files += 1
+                    logger.info(f"🗑️ Deleted: {db_file}")
+            except Exception as e:
+                logger.error(f"Failed to delete {db_file}: {e}")
+        
+        # Reinitialize all systems
+        try:
+            strategy_db = StrategyDatabase()
+            episodic_memory = EpisodicMemoryManager()
+            performance_tracker = PerformanceTracker()
+            logger.info("✅ All memory systems reinitialized with fresh databases")
+        except Exception as e:
+            logger.error("Failed to reinitialize systems", error=str(e))
+            
+        return {
+            "success": True,
+            "message": "🔥 NUCLEAR RESET COMPLETE - All databases deleted and recreated",
+            "files_deleted": deleted_files,
+            "timestamp": datetime.now().isoformat(),
+            "warning": "ALL DATA PERMANENTLY DESTROYED. System is completely fresh."
+        }
+        
+    except Exception as e:
+        logger.error("Nuclear reset failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Nuclear reset failed: {str(e)}")
+
+@app.post("/api/v1/memory/reset-complete")
+async def reset_complete_system():
+    """Complete system reset - Fresh start with all AI learning data cleared"""
+    global strategy_db, episodic_memory, performance_tracker
+    
+    try:
+        logger.warning("🚨 COMPLETE SYSTEM RESET INITIATED - All AI learning will be permanently deleted")
+        
+        reset_summary = {
+            "strategy_database": {"success": False, "items_cleared": 0, "error": None},
+            "episodic_memory": {"success": False, "items_cleared": 0, "error": None},
+            "performance_tracker": {"success": False, "items_cleared": 0, "error": None}
+        }
+        
+        total_cleared = 0
+        
+        # 1. Reset Strategy Database
+        try:
+            if strategy_db:
+                stats = strategy_db.get_strategy_statistics()
+                strategies_count = stats.get("total_strategies", 0)
+                
+                strategy_db.clear_all_strategies()
+                reset_summary["strategy_database"] = {
+                    "success": True,
+                    "items_cleared": strategies_count,
+                    "message": f"Cleared {strategies_count} learned strategies"
+                }
+                total_cleared += strategies_count
+                logger.info("✅ Strategy database reset", strategies_cleared=strategies_count)
+            else:
+                reset_summary["strategy_database"]["error"] = "Strategy database not initialized"
+        except Exception as e:
+            reset_summary["strategy_database"]["error"] = str(e)
+            logger.error("❌ Strategy database reset failed", error=str(e))
+        
+        # 2. Reset Episodic Memory
+        try:
+            if episodic_memory:
+                stats = episodic_memory.get_memory_statistics()
+                episodes_count = stats.get("total_episodes", 0)
+                
+                episodic_memory.clear_all_episodes()
+                reset_summary["episodic_memory"] = {
+                    "success": True,
+                    "items_cleared": episodes_count,
+                    "message": f"Cleared {episodes_count} memory episodes"
+                }
+                total_cleared += episodes_count
+                logger.info("✅ Episodic memory reset", episodes_cleared=episodes_count)
+            else:
+                reset_summary["episodic_memory"]["error"] = "Episodic memory not initialized"
+        except Exception as e:
+            reset_summary["episodic_memory"]["error"] = str(e)
+            logger.error("❌ Episodic memory reset failed", error=str(e))
+        
+        # 3. Reset Performance Tracker
+        try:
+            if performance_tracker:
+                performance_tracker.clear_all_metrics()
+                reset_summary["performance_tracker"] = {
+                    "success": True,
+                    "items_cleared": "all_metrics",
+                    "message": "Cleared all performance metrics and history"
+                }
+                logger.info("✅ Performance tracker reset")
+            else:
+                reset_summary["performance_tracker"]["error"] = "Performance tracker not initialized"
+        except Exception as e:
+            reset_summary["performance_tracker"]["error"] = str(e)
+            logger.error("❌ Performance tracker reset failed", error=str(e))
+        
+        # 4. Force refresh memory systems (clear cached data)
+        try:
+            logger.info("🔄 Reinitializing memory systems to clear cached data...")
+            
+            # Reinitialize all memory systems to clear any cached statistics
+            if strategy_db:
+                strategy_db = StrategyDatabase()
+                logger.info("Strategy database reinitialized")
+                
+            if episodic_memory:
+                episodic_memory = EpisodicMemoryManager()
+                logger.info("Episodic memory reinitialized")
+                
+            if performance_tracker:
+                performance_tracker = PerformanceTracker()
+                logger.info("Performance tracker reinitialized")
+                
+        except Exception as e:
+            logger.warning("⚠️ Memory system reinitialization failed", error=str(e))
+
+        # Calculate success rate
+        successful_resets = sum(1 for system in reset_summary.values() if system.get("success", False))
+        total_systems = len(reset_summary)
+        
+        overall_success = successful_resets == total_systems
+        
+        # Final status
+        if overall_success:
+            logger.warning("🎯 COMPLETE SYSTEM RESET SUCCESSFUL - AI will start fresh")
+            status_message = f"✅ Successfully reset all {total_systems} memory systems"
+        else:
+            logger.error(f"⚠️ PARTIAL RESET - {successful_resets}/{total_systems} systems reset successfully")
+            status_message = f"⚠️ Partial reset: {successful_resets}/{total_systems} systems"
+        
+        return {
+            "success": overall_success,
+            "message": status_message,
+            "total_items_cleared": total_cleared,
+            "systems_reset": successful_resets,
+            "total_systems": total_systems,
+            "reset_details": reset_summary,
+            "timestamp": datetime.now().isoformat(),
+            "warning": "All AI learning data has been permanently deleted. The system will start learning from scratch."
+        }
+        
+    except Exception as e:
+        logger.error("❌ COMPLETE SYSTEM RESET FAILED", error=str(e))
+        raise HTTPException(status_code=500, detail=f"System reset failed: {str(e)}")
 
 # Debug and development endpoints
 @app.post("/api/v1/debug/test-gpt4-direct")
@@ -1263,6 +1433,189 @@ async def process_execution_feedback(request: ExecutionFeedbackRequest):
     except Exception as e:
         logger.error("Failed to process execution feedback", error=str(e))
         raise HTTPException(status_code=500, detail=f"Feedback processing failed: {str(e)}")
+
+# Test Management Endpoints
+class TestTriggerRequest(BaseModel):
+    test_type: str = Field(..., description="Type of test: imagepull, crashloop, or oom")
+    pod_name: Optional[str] = Field(None, description="Custom pod name (auto-generated if not provided)")
+    namespace: str = Field(default="default", description="Kubernetes namespace")
+
+class TestTriggerResponse(BaseModel):
+    test_id: str
+    test_type: str
+    pod_name: str
+    namespace: str
+    status: str
+    message: str
+    yaml_applied: bool
+    timestamp: str
+
+@app.post("/api/v1/tests/trigger", response_model=TestTriggerResponse)
+async def trigger_test(request: TestTriggerRequest):
+    """Trigger a specific test scenario by deploying a test pod"""
+    import subprocess
+    import uuid
+    from pathlib import Path
+    
+    try:
+        # Generate unique test ID and pod name
+        test_id = str(uuid.uuid4())[:8]
+        
+        # Map test types to YAML files
+        yaml_files = {
+            "imagepull": "test-imagepull-pod.yaml",
+            "crashloop": "test-crashloop-pod.yaml", 
+            "oom": "test-memory-limit.yaml"
+        }
+        
+        if request.test_type not in yaml_files:
+            raise HTTPException(status_code=400, detail=f"Invalid test type. Must be one of: {list(yaml_files.keys())}")
+        
+        yaml_file = yaml_files[request.test_type]
+        yaml_path = Path(__file__).parent / yaml_file
+        
+        if not yaml_path.exists():
+            raise HTTPException(status_code=404, detail=f"Test YAML file not found: {yaml_file}")
+        
+        # Generate pod name
+        pod_name = request.pod_name or f"test-{request.test_type}-{test_id}"
+        
+        logger.info(f"🧪 Triggering {request.test_type} test", 
+                   test_id=test_id, pod_name=pod_name, yaml_file=yaml_file)
+        
+        # Apply the YAML file using kubectl
+        try:
+            result = subprocess.run(
+                ["kubectl", "apply", "-f", str(yaml_path), "-n", request.namespace],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                yaml_applied = True
+                status = "deployed"
+                message = f"Test pod {pod_name} deployed successfully"
+                logger.info("✅ Test pod deployed", pod_name=pod_name, output=result.stdout.strip())
+            else:
+                yaml_applied = False
+                status = "failed"
+                message = f"Failed to deploy test pod: {result.stderr}"
+                logger.error("❌ Test pod deployment failed", error=result.stderr)
+                
+        except subprocess.TimeoutExpired:
+            yaml_applied = False
+            status = "timeout" 
+            message = "kubectl command timed out"
+            logger.error("⏰ kubectl command timeout")
+            
+        except FileNotFoundError:
+            yaml_applied = False
+            status = "kubectl_not_found"
+            message = "kubectl command not found. Please install kubectl."
+            logger.error("❌ kubectl not found")
+        
+        return TestTriggerResponse(
+            test_id=test_id,
+            test_type=request.test_type,
+            pod_name=pod_name,
+            namespace=request.namespace,
+            status=status,
+            message=message,
+            yaml_applied=yaml_applied,
+            timestamp=datetime.now().isoformat()
+        )
+        
+    except Exception as e:
+        logger.error("Test trigger failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Test trigger failed: {str(e)}")
+
+@app.get("/api/v1/tests/status/{test_type}")
+async def get_test_status(test_type: str, namespace: str = "default"):
+    """Get status of test pods for a specific test type"""
+    import subprocess
+    
+    try:
+        # Get pods with test labels
+        result = subprocess.run(
+            ["kubectl", "get", "pods", "-n", namespace, "-l", f"app={test_type}-test", "-o", "json"],
+            capture_output=True,
+            text=True,
+            timeout=15
+        )
+        
+        if result.returncode == 0:
+            import json as json_lib
+            pods_data = json_lib.loads(result.stdout)
+            
+            pod_statuses = []
+            for pod in pods_data.get("items", []):
+                pod_status = {
+                    "name": pod["metadata"]["name"],
+                    "phase": pod["status"].get("phase", "Unknown"),
+                    "created": pod["metadata"]["creationTimestamp"],
+                    "ready": "0/0",
+                    "restarts": 0
+                }
+                
+                # Get container statuses
+                if "containerStatuses" in pod["status"]:
+                    for container in pod["status"]["containerStatuses"]:
+                        pod_status["restarts"] += container.get("restartCount", 0)
+                        if container.get("ready", False):
+                            pod_status["ready"] = "1/1"
+                
+                pod_statuses.append(pod_status)
+            
+            return {
+                "test_type": test_type,
+                "namespace": namespace, 
+                "pod_count": len(pod_statuses),
+                "pods": pod_statuses,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "test_type": test_type,
+                "namespace": namespace,
+                "pod_count": 0,
+                "pods": [],
+                "error": result.stderr,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+    except Exception as e:
+        logger.error("Failed to get test status", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get test status: {str(e)}")
+
+@app.delete("/api/v1/tests/cleanup/{test_type}")
+async def cleanup_test_pods(test_type: str, namespace: str = "default"):
+    """Clean up test pods for a specific test type"""
+    import subprocess
+    
+    try:
+        # Delete pods with test labels
+        result = subprocess.run(
+            ["kubectl", "delete", "pods", "-n", namespace, "-l", f"app={test_type}-test", "--force", "--grace-period=0"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        logger.info(f"🧹 Cleaning up {test_type} test pods", namespace=namespace)
+        
+        return {
+            "test_type": test_type,
+            "namespace": namespace,
+            "success": result.returncode == 0,
+            "output": result.stdout,
+            "error": result.stderr if result.returncode != 0 else None,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("Failed to cleanup test pods", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup test pods: {str(e)}")
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):

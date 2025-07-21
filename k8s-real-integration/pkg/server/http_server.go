@@ -157,6 +157,17 @@ func (s *HTTPServer) handleExecuteCommands(w http.ResponseWriter, r *http.Reques
 
 // handleHealth handles health check requests
 func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
+	// Add CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	health := map[string]interface{}{
 		"status":            "healthy",
 		"timestamp":         time.Now().Format(time.RFC3339),
