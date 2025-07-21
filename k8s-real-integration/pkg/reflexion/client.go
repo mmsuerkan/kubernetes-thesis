@@ -28,10 +28,10 @@ func NewClient(baseURL string) *Client {
 
 // RealK8sData represents the real Kubernetes data to send
 type RealK8sData struct {
-	PodSpec           *v1.Pod                `json:"pod_spec"`
-	Events            []v1.Event             `json:"events"`
-	Logs              []string               `json:"logs"`
-	ContainerStatuses []v1.ContainerStatus  `json:"container_statuses,omitempty"`
+	PodSpec           *v1.Pod              `json:"pod_spec"`
+	Events            []v1.Event           `json:"events"`
+	Logs              []string             `json:"logs"`
+	ContainerStatuses []v1.ContainerStatus `json:"container_statuses,omitempty"`
 }
 
 // GoServiceErrorRequest is the request to send to Python reflexion service

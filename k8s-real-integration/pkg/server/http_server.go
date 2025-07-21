@@ -19,27 +19,27 @@ type HTTPServer struct {
 
 // ExecuteCommandsRequest represents the request for executing kubectl commands
 type ExecuteCommandsRequest struct {
-	PodName     string              `json:"pod_name"`
-	Namespace   string              `json:"namespace"`
-	ErrorType   string              `json:"error_type"`
-	Commands    map[string][]string `json:"commands"`
-	DryRun      bool                `json:"dry_run"`
-	Timeout     int                 `json:"timeout"` // seconds
+	PodName   string              `json:"pod_name"`
+	Namespace string              `json:"namespace"`
+	ErrorType string              `json:"error_type"`
+	Commands  map[string][]string `json:"commands"`
+	DryRun    bool                `json:"dry_run"`
+	Timeout   int                 `json:"timeout"` // seconds
 }
 
 // ExecuteCommandsResponse represents the response after executing kubectl commands
 type ExecuteCommandsResponse struct {
-	PodName       string                         `json:"pod_name"`
-	Namespace     string                         `json:"namespace"`
-	ErrorType     string                         `json:"error_type"`
-	TotalCommands int                            `json:"total_commands"`
-	SuccessCount  int                            `json:"success_count"`
-	FailureCount  int                            `json:"failure_count"`
-	Duration      string                         `json:"duration"`
-	Status        string                         `json:"status"`
-	Report        *executor.ExecutionReport      `json:"report"`
-	Commands      []executor.CommandResult       `json:"commands"`
-	Message       string                         `json:"message"`
+	PodName       string                    `json:"pod_name"`
+	Namespace     string                    `json:"namespace"`
+	ErrorType     string                    `json:"error_type"`
+	TotalCommands int                       `json:"total_commands"`
+	SuccessCount  int                       `json:"success_count"`
+	FailureCount  int                       `json:"failure_count"`
+	Duration      string                    `json:"duration"`
+	Status        string                    `json:"status"`
+	Report        *executor.ExecutionReport `json:"report"`
+	Commands      []executor.CommandResult  `json:"commands"`
+	Message       string                    `json:"message"`
 }
 
 // NewHTTPServer creates a new HTTP server for kubectl command execution
@@ -102,13 +102,13 @@ func (s *HTTPServer) handleExecuteCommands(w http.ResponseWriter, r *http.Reques
 		req.Timeout = 60 // 60 seconds default
 	}
 
-	log.Printf("🔧 Executing kubectl commands for pod: %s (error: %s, dry-run: %v)", 
+	log.Printf("🔧 Executing kubectl commands for pod: %s (error: %s, dry-run: %v)",
 		req.PodName, req.ErrorType, req.DryRun)
 
 	// Execute commands in correct order: backup -> fix -> validation (skip rollback)
 	var allCommands []string
 	executionOrder := []string{"backup_commands", "fix_commands", "validation_commands"}
-	
+
 	for _, category := range executionOrder {
 		if commands, exists := req.Commands[category]; exists {
 			log.Printf("📂 Category: %s - %d commands", category, len(commands))
@@ -150,7 +150,7 @@ func (s *HTTPServer) handleExecuteCommands(w http.ResponseWriter, r *http.Reques
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("❌ Failed to encode response: %v", err)
 	} else {
-		log.Printf("✅ kubectl command execution completed: %s (%d/%d succeeded)", 
+		log.Printf("✅ kubectl command execution completed: %s (%d/%d succeeded)",
 			report.Status, report.SuccessCount, report.TotalCommands)
 	}
 }
@@ -158,9 +158,9 @@ func (s *HTTPServer) handleExecuteCommands(w http.ResponseWriter, r *http.Reques
 // handleHealth handles health check requests
 func (s *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := map[string]interface{}{
-		"status":     "healthy",
-		"timestamp":  time.Now().Format(time.RFC3339),
-		"service":    "kubectl-executor",
+		"status":            "healthy",
+		"timestamp":         time.Now().Format(time.RFC3339),
+		"service":           "kubectl-executor",
 		"kubectl_available": s.executor.IsKubectlAvailable(),
 	}
 

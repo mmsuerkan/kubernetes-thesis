@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = structlog.get_logger()
-logger.info("📄 YAML Manifest Generator module loaded - Full control over K8s resources")
+logger.info("YAML Manifest Generator module loaded - Full control over K8s resources")
 
 
 class YAMLManifestGenerator:
@@ -91,6 +91,30 @@ class YAMLManifestGenerator:
         system_prompt = """You are a Kubernetes expert specializing in manifest generation.
 Generate complete, valid YAML manifests to fix Kubernetes pod errors.
 
+🚨 CRITICAL YAML STRUCTURE REQUIREMENTS:
+- annotations MUST be under metadata, NEVER under spec
+- labels MUST be under metadata, NEVER under spec
+- CORRECT structure: metadata/labels, metadata/annotations
+- WRONG structure: spec/labels, spec/annotations
+
+MANDATORY YAML STRUCTURE:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-name
+  namespace: namespace-name
+  labels:
+    key: value    # ✅ CORRECT - labels in metadata
+  annotations:
+    key: value    # ✅ CORRECT - annotations in metadata
+spec:
+  containers:     # ✅ CORRECT - no labels/annotations here
+  - name: container
+    image: nginx:latest
+  restartPolicy: Always
+```
+
 ERROR-SPECIFIC FIX STRATEGIES:
 
 1. ImagePullBackOff:
@@ -127,6 +151,7 @@ MANIFEST GENERATION RULES:
 4. Fix ONLY the problematic parts
 5. Ensure all YAML is valid and properly indented
 6. Add helpful comments explaining the fixes
+7. NEVER put labels or annotations under spec section
 
 OUTPUT FORMAT:
 Return ONLY the YAML manifest without any additional text or markdown code blocks.

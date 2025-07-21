@@ -267,7 +267,6 @@ func (c *Client) GetPodErrorType(pod *v1.Pod) string {
 				return "ConfigError"
 			}
 		}
-		}
 	}
 
 	// Check pod phase

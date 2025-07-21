@@ -81,7 +81,7 @@ func (pw *PodWatcher) watchLoop() {
 func (pw *PodWatcher) performWatch() error {
 	// Get clientset (this is a simplified approach)
 	// In a real implementation, you'd use the proper watch API
-	
+
 	// For now, we'll use a polling approach
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -122,14 +122,14 @@ func (pw *PodWatcher) shouldProcessPod(pod *v1.Pod) bool {
 	podKey := fmt.Sprintf("%s/%s/%s", pod.Namespace, pod.Name, pod.UID)
 
 	// Debug: Log pod status
-	log.Printf("🔍 DEBUG: Pod %s (UID: %s) - Phase: %s, ContainerStatuses: %d", 
+	log.Printf("🔍 DEBUG: Pod %s (UID: %s) - Phase: %s, ContainerStatuses: %d",
 		pod.Name, string(pod.UID)[:8], pod.Status.Phase, len(pod.Status.ContainerStatuses))
-	
+
 	for i, containerStatus := range pod.Status.ContainerStatuses {
-		log.Printf("🔍 DEBUG: Container %d - Ready: %t, State: %+v", 
+		log.Printf("🔍 DEBUG: Container %d - Ready: %t, State: %+v",
 			i, containerStatus.Ready, containerStatus.State)
 		if containerStatus.State.Waiting != nil {
-			log.Printf("🔍 DEBUG: Waiting reason: %s, message: %s", 
+			log.Printf("🔍 DEBUG: Waiting reason: %s, message: %s",
 				containerStatus.State.Waiting.Reason, containerStatus.State.Waiting.Message)
 		}
 	}
@@ -137,7 +137,7 @@ func (pw *PodWatcher) shouldProcessPod(pod *v1.Pod) bool {
 	// Check if pod has failed
 	isFailed := pw.k8sClient.IsPodFailed(pod)
 	log.Printf("🔍 DEBUG: Pod %s IsPodFailed result: %t", pod.Name, isFailed)
-	
+
 	if !isFailed {
 		return false
 	}
@@ -157,7 +157,7 @@ func (pw *PodWatcher) processPod(pod *v1.Pod) {
 	podKey := fmt.Sprintf("%s/%s/%s", pod.Namespace, pod.Name, pod.UID)
 	errorType := pw.k8sClient.GetPodErrorType(pod)
 
-	log.Printf("🚨 Processing failed pod: %s/%s (UID: %s), Error: %s", 
+	log.Printf("🚨 Processing failed pod: %s/%s (UID: %s), Error: %s",
 		pod.Namespace, pod.Name, string(pod.UID)[:8], errorType)
 
 	// Mark as processed (by UID)
@@ -200,7 +200,7 @@ func (pw *PodWatcher) processPod(pod *v1.Pod) {
 	} else {
 		log.Printf("🤖 AI strategy available for pod %s", podKey)
 		log.Printf("📄 YAML Manifest mode active - Python service handles pod fixing automatically")
-		
+
 		// YAML mode: Python service already processed the pod with YAML manifests
 		// No need for separate kubectl command generation
 	}
@@ -248,31 +248,31 @@ func (pw *PodWatcher) ResetProcessedPods() {
 // generateAndExecuteCommands generates kubectl commands using AI and executes them
 func (pw *PodWatcher) generateAndExecuteCommands(pod *v1.Pod, response *reflexion.ProcessPodErrorResponse, errorType string) error {
 	log.Printf("🔧 Generating kubectl commands for pod %s", pod.Name)
-	
+
 	// Step 1: Call Python service to generate commands
 	commands, err := pw.generateCommands(pod, response, errorType)
 	if err != nil {
 		return fmt.Errorf("failed to generate commands: %v", err)
 	}
-	
+
 	log.Printf("✅ Generated %d command categories", len(commands))
-	
+
 	// Step 2: Execute commands via local HTTP server
 	executionResult, err := pw.executeCommands(pod, commands, errorType)
 	if err != nil {
 		return fmt.Errorf("failed to execute commands: %v", err)
 	}
-	
-	log.Printf("📊 Execution result: %s (%d/%d commands succeeded)", 
+
+	log.Printf("📊 Execution result: %s (%d/%d commands succeeded)",
 		executionResult.Status, executionResult.SuccessCount, executionResult.TotalCommands)
-	
+
 	// Step 3: Send execution feedback to Python service for reflexion
 	err = pw.sendExecutionFeedback(pod, response, executionResult, errorType)
 	if err != nil {
 		log.Printf("⚠️  Failed to send execution feedback: %v", err)
 		// Continue anyway, don't fail the whole process
 	}
-	
+
 	// Step 4: If pod was successfully fixed, remove from processed list
 	// This allows re-processing if the same pod fails again
 	if executionResult.Status == "success" {
@@ -282,7 +282,7 @@ func (pw *PodWatcher) generateAndExecuteCommands(pod *v1.Pod, response *reflexio
 		pw.mutex.Unlock()
 		log.Printf("✅ Pod %s successfully fixed, removed from processed list", podKey)
 	}
-	
+
 	return nil
 }
 
@@ -313,13 +313,13 @@ func (pw *PodWatcher) generateCommands(pod *v1.Pod, response *reflexion.ProcessP
 		},
 		"dry_run": false,
 	}
-	
+
 	// Convert to JSON
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
-	
+
 	// Make HTTP request to Python service
 	pythonURL := "http://localhost:8000/api/v1/executor/generate-commands"
 	resp, err := http.Post(pythonURL, "application/json", bytes.NewBuffer(jsonData))
@@ -327,20 +327,20 @@ func (pw *PodWatcher) generateCommands(pod *v1.Pod, response *reflexion.ProcessP
 		return nil, fmt.Errorf("failed to call Python service: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Python service returned status %d", resp.StatusCode)
 	}
-	
+
 	// Parse response
 	var commandResponse struct {
 		Commands map[string][]string `json:"commands"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&commandResponse); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
-	
+
 	return commandResponse.Commands, nil
 }
 
@@ -355,13 +355,13 @@ func (pw *PodWatcher) executeCommands(pod *v1.Pod, commands map[string][]string,
 		"dry_run":    false,
 		"timeout":    120,
 	}
-	
+
 	// Convert to JSON
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
-	
+
 	// Make HTTP request to local Go server
 	goURL := "http://localhost:8080/api/v1/execute-commands"
 	resp, err := http.Post(goURL, "application/json", bytes.NewBuffer(jsonData))
@@ -369,17 +369,17 @@ func (pw *PodWatcher) executeCommands(pod *v1.Pod, commands map[string][]string,
 		return nil, fmt.Errorf("failed to call Go HTTP server: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Go HTTP server returned status %d", resp.StatusCode)
 	}
-	
+
 	// Parse response
 	var executionResult ExecutionResult
 	if err := json.NewDecoder(resp.Body).Decode(&executionResult); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
-	
+
 	return &executionResult, nil
 }
 
@@ -410,14 +410,14 @@ type CommandResult struct {
 // sendExecutionFeedback sends execution results back to Python service for reflexion
 func (pw *PodWatcher) sendExecutionFeedback(pod *v1.Pod, response *reflexion.ProcessPodErrorResponse, executionResult *ExecutionResult, errorType string) error {
 	log.Printf("🔄 Sending execution feedback for reflexion learning...")
-	
+
 	// Prepare feedback data
 	feedbackData := map[string]interface{}{
-		"workflow_id":     response.WorkflowID,
-		"pod_name":        pod.Name,
-		"namespace":       pod.Namespace,
-		"error_type":      errorType,
-		"strategy_used":   response.FinalStrategy,
+		"workflow_id":   response.WorkflowID,
+		"pod_name":      pod.Name,
+		"namespace":     pod.Namespace,
+		"error_type":    errorType,
+		"strategy_used": response.FinalStrategy,
 		"execution_result": map[string]interface{}{
 			"success":           executionResult.Status == "success",
 			"partial_success":   executionResult.Status == "partial",
@@ -430,13 +430,13 @@ func (pw *PodWatcher) sendExecutionFeedback(pod *v1.Pod, response *reflexion.Pro
 		},
 		"timestamp": time.Now().Format(time.RFC3339),
 	}
-	
+
 	// Convert to JSON
 	jsonData, err := json.Marshal(feedbackData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal feedback: %v", err)
 	}
-	
+
 	// Send to Python service reflexion endpoint
 	pythonURL := "http://localhost:8000/api/v1/reflexion/execution-feedback"
 	resp, err := http.Post(pythonURL, "application/json", bytes.NewBuffer(jsonData))
@@ -444,11 +444,11 @@ func (pw *PodWatcher) sendExecutionFeedback(pod *v1.Pod, response *reflexion.Pro
 		return fmt.Errorf("failed to send feedback to Python service: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Python service returned status %d for feedback", resp.StatusCode)
 	}
-	
+
 	log.Printf("✅ Execution feedback sent for reflexion learning")
 	return nil
 }

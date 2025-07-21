@@ -11,8 +11,8 @@ import (
 
 	"k8s-real-integration-go/pkg/k8s"
 	"k8s-real-integration-go/pkg/reflexion"
-	"k8s-real-integration-go/pkg/watcher"
 	"k8s-real-integration-go/pkg/server"
+	"k8s-real-integration-go/pkg/watcher"
 )
 
 func main() {
@@ -119,7 +119,7 @@ func main() {
 // runTestMode runs the original mock test
 func runTestMode(reflexionURL string) {
 	fmt.Println("🧪 Running mock pod test...")
-	
+
 	// Simple test for now
 	testMockPod(reflexionURL)
 }
@@ -127,16 +127,15 @@ func runTestMode(reflexionURL string) {
 // testMockPod runs a simple mock test
 func testMockPod(reflexionURL string) {
 	fmt.Printf("🔧 Testing reflexion service at: %s\n", reflexionURL)
-	
+
 	// Create reflexion client
 	reflexionClient := reflexion.NewClient(reflexionURL)
-	
+
 	// Test health check
 	if err := reflexionClient.HealthCheck(); err != nil {
 		fmt.Printf("❌ Mock test failed: %v\n", err)
 		return
 	}
-	
+
 	fmt.Println("✅ Mock test completed successfully")
 }
-

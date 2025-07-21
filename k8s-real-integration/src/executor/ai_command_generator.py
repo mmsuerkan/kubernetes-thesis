@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = structlog.get_logger()
-logger.info("🤖 AI Command Generator module loaded - Enhanced logging enabled")
+logger.info("AI Command Generator module loaded - Enhanced logging enabled")
 
 
 class AICommandGenerator:
