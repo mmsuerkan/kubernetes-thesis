@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # Python Reflexion Service (önce başlatılmalı)
+  reflexion-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./reflexion_strategies.db:/app/reflexion_strategies.db
+      - ./reflexion_episodes.db:/app/reflexion_episodes.db
+      - ./reflexion_performance.db:/app/reflexion_performance.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    container_name: reflexion-service
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Go Pod Watcher Service (Python servisten sonra başlatılmalı)
+  pod-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.go
+    ports:
+      - "8080:8080"
+    environment:
+      - REFLEXION_SERVICE_URL=http://reflexion-service:8000
+      - KUBERNETES_NAMESPACE=default
+      - WATCH_INTERVAL=10s
+      - LOG_LEVEL=INFO
+      - KUBECONFIG=/home/appuser/.kube/config
+      - HOME=/home/appuser
+    volumes:
+      # Windows kubeconfig mounting - use flattened config
+      - ${USERPROFILE}/.kube/config-container:/home/appuser/.kube/config:ro
+      # Linux için alternatif
+      # - ~/.kube:/home/appuser/.kube:ro
+      # - ~/.minikube:/home/appuser/.minikube:ro
+    depends_on:
+      reflexion-service:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+    container_name: pod-watcher
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Log aggregator for easier monitoring
+  logs:
+    image: busybox:latest
+    command: tail -f /dev/null
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    container_name: log-aggregator
+    profiles: ["logs"]
+
+networks:
+  default:
+    name: k8s-reflexion-network
+    external: false

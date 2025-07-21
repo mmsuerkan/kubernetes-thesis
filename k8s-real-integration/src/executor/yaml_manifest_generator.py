@@ -257,15 +257,25 @@ Generate a complete, fixed pod manifest that resolves the {error_type} error."""
         logger.info(response.content)
         logger.info("=" * 80)
         
+        # Clean markdown code blocks from AI response
+        cleaned_content = response.content.strip()
+        if cleaned_content.startswith("```yaml"):
+            cleaned_content = cleaned_content[7:]  # Remove ```yaml
+        if cleaned_content.startswith("```"):
+            cleaned_content = cleaned_content[3:]   # Remove ```
+        if cleaned_content.endswith("```"):
+            cleaned_content = cleaned_content[:-3]  # Remove trailing ```
+        cleaned_content = cleaned_content.strip()
+        
         # Validate the generated YAML
         try:
-            yaml.safe_load(response.content)
+            yaml.safe_load(cleaned_content)
             logger.info("✅ Generated valid YAML manifest")
-            return response.content
+            return cleaned_content
         except yaml.YAMLError as e:
             logger.error("Generated invalid YAML", error=str(e))
             logger.error("Invalid YAML content:")
-            logger.error(response.content)
+            logger.error(cleaned_content)
             raise
     
     def _is_deployment_managed(self, pod_name: str) -> bool:
@@ -290,7 +300,7 @@ Generate a complete, fixed pod manifest that resolves the {error_type} error."""
                 "labels": {
                     "app": pod_name,
                     "fixed-by": "reflexion-system",
-                    "fix-timestamp": datetime.now().isoformat()
+                    "fix-timestamp": datetime.now().strftime('%Y%m%d-%H%M%S')
                 }
             },
             "spec": {

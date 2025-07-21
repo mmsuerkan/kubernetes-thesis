@@ -19,10 +19,16 @@ func main() {
 	fmt.Println("🚀 Starting K8s Real-Time Pod Monitoring System")
 	fmt.Println("📡 Connecting to Kubernetes cluster and Python Reflexion Service")
 
+	// Get default reflexion URL from environment or use localhost
+	defaultReflexionURL := os.Getenv("REFLEXION_SERVICE_URL")
+	if defaultReflexionURL == "" {
+		defaultReflexionURL = "http://localhost:8000"
+	}
+
 	// Parse command line flags
 	var (
 		namespace      = flag.String("namespace", "default", "Namespace to monitor")
-		reflexionURL   = flag.String("reflexion-url", "http://localhost:8000", "Reflexion service URL")
+		reflexionURL   = flag.String("reflexion-url", defaultReflexionURL, "Reflexion service URL")
 		testMode       = flag.Bool("test-mode", false, "Run in test mode (mock pod)")
 		httpPort       = flag.Int("http-port", 8080, "HTTP server port for kubectl execution")
 		dryRun         = flag.Bool("dry-run", false, "Enable dry-run mode for kubectl commands")

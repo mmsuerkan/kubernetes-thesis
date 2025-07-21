@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -49,9 +50,21 @@ func NewClient() (*Client, error) {
 func getKubeConfig() (*rest.Config, error) {
 	var kubeconfig string
 	
-	// Check if kubeconfig path is set
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = filepath.Join(home, ".kube", "config")
+	// Check environment variable first
+	if kubeconfigPath := os.Getenv("KUBECONFIG"); kubeconfigPath != "" {
+		kubeconfig = kubeconfigPath
+		log.Printf("🔧 Using KUBECONFIG from environment: %s", kubeconfig)
+	} else {
+		// Check if kubeconfig path is set
+		if home := homedir.HomeDir(); home != "" {
+			kubeconfig = filepath.Join(home, ".kube", "config")
+			log.Printf("🔧 Using default kubeconfig path: %s", kubeconfig)
+		}
+	}
+
+	// Verify kubeconfig file exists
+	if _, err := os.Stat(kubeconfig); os.IsNotExist(err) {
+		return nil, fmt.Errorf("kubeconfig file not found at %s", kubeconfig)
 	}
 
 	// Build config from kubeconfig
@@ -60,6 +73,7 @@ func getKubeConfig() (*rest.Config, error) {
 		return nil, fmt.Errorf("failed to build config from kubeconfig: %w", err)
 	}
 
+	log.Printf("✅ Successfully loaded kubeconfig")
 	return config, nil
 }
 
@@ -166,7 +180,8 @@ func (c *Client) IsPodFailed(pod *v1.Pod) bool {
 			reason := containerStatus.State.Waiting.Reason
 			if reason == "ImagePullBackOff" || reason == "ErrImagePull" || reason == "CrashLoopBackOff" ||
 			   reason == "InvalidImageName" || reason == "CreateContainerConfigError" ||
-			   reason == "CreateContainerError" || reason == "ConfigError" {
+			   reason == "CreateContainerError" || reason == "ConfigError" ||
+			   reason == "RunContainerError" || reason == "ContainerCannotRun" {
 				return true
 			}
 		}
@@ -265,6 +280,10 @@ func (c *Client) GetPodErrorType(pod *v1.Pod) string {
 				return "CreateContainerError"
 			case "ConfigError":
 				return "ConfigError"
+			case "RunContainerError":
+				return "RunContainerError"
+			case "ContainerCannotRun":
+				return "ContainerCannotRun"
 			}
 		}
 	}
